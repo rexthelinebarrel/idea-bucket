@@ -53,7 +53,14 @@
           "microphonePermission": "允许灵感桶使用麦克风录制语音灵感。"
         }
       ],
-      "@jamsch/expo-speech-recognition"
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "允许灵感桶使用麦克风录制语音灵感。",
+          "speechRecognitionPermission": "允许灵感桶使用语音识别，把语音转成文字。",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
