@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/theme';
-import { countIdeas, createIdea, genId } from '@/lib/db';
+import { countIdeas, createIdea, genId, setSetting } from '@/lib/db';
 import { moveRecording } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
@@ -73,6 +73,7 @@ export default function HomeScreen() {
   });
   useSpeechRecognitionEvent('error', (ev) => {
     speechErrorRef.current = ev.message || ev.error;
+    setSetting('last_speech_error', `${new Date().toLocaleString()} ${ev.error}: ${ev.message}`);
   });
   useSpeechRecognitionEvent('end', () => {
     endSignalRef.current?.();

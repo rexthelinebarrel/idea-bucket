@@ -1,21 +1,38 @@
-// 设置：AI 服务配置（OpenAI 兼容）+ 回收站入口。
-// API Key 只保存在本机 SQLite，不上传任何第三方。
+// 设置：转写模式 / 识别服务 / AI 服务 / 数据 / 更新 / 诊断信息。
+// 诊断信息卡片是排障入口：一屏装齐所有关键状态，一键分享，免去来回描述报错。
 import { useCallback, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
 import { colors } from '@/theme';
-import { listDeletedIdeas } from '@/lib/db';
+import { listDeletedIdeas, getSetting, setSetting } from '@/lib/db';
 import { getAISettings, saveAISettings, type AISettings } from '@/lib/ai';
 
-const FIELDS: { key: keyof AISettings; label: string; placeholder: string; secure?: boolean }[] = [
+const FIELDS: {
+  key: keyof AISettings;
+  label: string;
+  placeholder: string;
+  secure?: boolean;
+  /** 仅云端 API 转写模式下显示 */
+  cloudOnly?: boolean;
+}[] = [
   { key: 'baseUrl', label: 'API 地址（Base URL）', placeholder: 'https://api.openai.com/v1' },
   { key: 'apiKey', label: 'API Key', placeholder: 'sk-…', secure: true },
   { key: 'chatModel', label: '对话模型', placeholder: 'gpt-4o-mini' },
-  { key: 'transcribeModel', label: '转写模型', placeholder: 'whisper-1' },
+  { key: 'transcribeModel', label: '转写模型', placeholder: 'whisper-1', cloudOnly: true },
 ];
 
 export default function SettingsScreen() {
@@ -24,18 +41,36 @@ export default function SettingsScreen() {
   const [binCount, setBinCount] = useState(0);
   const [updateState, setUpdateState] = useState('');
   const [services, setServices] = useState<string[]>([]);
+  const [diag, setDiag] = useState<[string, string][]>([]);
+
+  function buildDiag(s: AISettings, svcCount: number): [string, string][] {
+    return [
+      ['App 版本', Constants.expoConfig?.version ?? '未知'],
+      ['运行时版本', Updates.runtimeVersion ?? '未知'],
+      ['更新批次', Updates.updateId ? Updates.updateId.slice(0, 8) : '内嵌包（未应用过 OTA）'],
+      ['更新通道', Updates.channel || '未知'],
+      ['转写模式', s.transcribeMode === 'system' ? '系统识别' : '云端 API'],
+      ['识别服务数', String(svcCount)],
+      ['最近识别错误', getSetting('last_speech_error') ?? '无'],
+      ['最近更新检查', getSetting('last_update_check') ?? '无'],
+    ];
+  }
 
   useFocusEffect(
     useCallback(() => {
-      setForm(getAISettings());
+      const s = getAISettings();
+      setForm(s);
       setBinCount(listDeletedIdeas().length);
+      let svc: string[] = [];
       if (Platform.OS === 'android') {
         try {
-          setServices(getSpeechRecognitionServices());
+          svc = getSpeechRecognitionServices();
         } catch {
-          setServices([]);
+          svc = [];
         }
       }
+      setServices(svc);
+      setDiag(buildDiag(s, svc.length));
     }, []),
   );
 
@@ -48,11 +83,13 @@ export default function SettingsScreen() {
   // OTA 热更新：拉取云端推送的新版本（仅限 JS/资源改动；原生改动仍需重装 APK）
   async function checkUpdate() {
     setUpdateState('检查中…');
+    const stamp = () => new Date().toLocaleString();
     try {
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
         setUpdateState('发现新版本，下载中…');
         await Updates.fetchUpdateAsync();
+        setSetting('last_update_check', `${stamp()} 拉到新版本`);
         setUpdateState('');
         Alert.alert('更新就绪', '重启应用以完成更新。', [
           { text: '稍后', style: 'cancel' },
@@ -60,11 +97,28 @@ export default function SettingsScreen() {
         ]);
       } else {
         setUpdateState('已是最新');
+        setSetting('last_update_check', `${stamp()} 已是最新`);
       }
+    } catch (e) {
+      setUpdateState('检查失败');
+      setSetting(
+        'last_update_check',
+        `${stamp()} 检查失败：${e instanceof Error ? e.message : '网络异常'}`,
+      );
+    }
+    setDiag(buildDiag(form, services.length));
+  }
+
+  async function shareDiag() {
+    const text = ['【灵感桶诊断信息】', ...diag.map(([k, v]) => `${k}：${v}`)].join('\n');
+    try {
+      await Share.share({ message: text });
     } catch {
-      setUpdateState('检查失败（开发模式下不可用）');
+      // 用户取消分享，忽略
     }
   }
+
+  const isCloud = form.transcribeMode === 'cloud';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -97,7 +151,7 @@ export default function SettingsScreen() {
         识别不了时，或想要更稳定的效果，再配下面的云端 API。
       </Text>
 
-      {form.transcribeMode === 'system' && (
+      {!isCloud && (
         <View>
           <Text style={styles.sectionTitle}>识别服务</Text>
           {services.length === 0 ? (
@@ -132,13 +186,13 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>AI 服务</Text>
+      <Text style={styles.sectionTitle}>{isCloud ? 'AI 服务' : 'AI 服务（可选）'}</Text>
       <Text style={styles.note}>
-        需兼容 OpenAI 接口。云端转写和 AI 讨论都用这组配置；Key 仅保存在本机数据库。
-        国内推荐硅基流动（siliconflow.cn，免费额度）：地址填 https://api.siliconflow.cn/v1，转写模型以控制台为准（如
-        FunAudioLLM/SenseVoiceSmall）；海外可选 Groq 或 OpenAI。
+        {isCloud
+          ? '云端转写和 AI 讨论都用这组配置；Key 仅保存在本机数据库。国内推荐硅基流动（siliconflow.cn，免费额度）：地址填 https://api.siliconflow.cn/v1，转写模型以控制台为准（如 FunAudioLLM/SenseVoiceSmall）；海外可选 Groq 或 OpenAI。'
+          : '系统识别已够用，这里不用配。想体验「AI 讨论」（对灵感展开/追问/对话）时再配：国内推荐硅基流动（siliconflow.cn，有免费模型）。'}
       </Text>
-      {FIELDS.map((f) => (
+      {FIELDS.filter((f) => isCloud || !f.cloudOnly).map((f) => (
         <View key={f.key} style={styles.field}>
           <Text style={styles.label}>{f.label}</Text>
           <TextInput
@@ -173,6 +227,22 @@ export default function SettingsScreen() {
         当前版本 {Constants.expoConfig?.version ?? '未知'}。日常改进会通过云端推送，点这里即可拉取；
         涉及原生功能的升级才需要重新安装 APK。
       </Text>
+
+      <Text style={styles.sectionTitle}>诊断信息</Text>
+      <View style={styles.diagCard}>
+        {diag.map(([k, v]) => (
+          <View key={k} style={styles.diagRow}>
+            <Text style={styles.diagKey}>{k}</Text>
+            <Text style={styles.diagValue} selectable>
+              {v}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <Pressable style={styles.saveButton} onPress={shareDiag}>
+        <Text style={styles.saveButtonText}>📤 分享诊断信息</Text>
+      </Pressable>
+      <Text style={styles.note}>遇到任何异常：点上面按钮把诊断信息发给开发者（或直接截图本页），一次说清。</Text>
     </ScrollView>
   );
 }
@@ -221,4 +291,14 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, color: colors.text, fontSize: 15 },
   rowArrow: { color: colors.textDim, fontSize: 18 },
+  diagCard: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    gap: 6,
+  },
+  diagRow: { flexDirection: 'row', gap: 10 },
+  diagKey: { color: colors.textDim, fontSize: 13, width: 92 },
+  diagValue: { color: colors.text, fontSize: 13, flex: 1 },
 });
