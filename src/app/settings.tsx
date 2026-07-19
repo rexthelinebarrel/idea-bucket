@@ -129,9 +129,7 @@ export default function SettingsScreen() {
     }
   }
 
-  // 一键上报：诊断 + 日志打包后跳转 GitHub 预填 issue。
-  // 公开仓库，提交前用户可以看到全部内容；日志只含事件与错误，不含灵感内容和 Key。
-  async function reportBug() {
+  function buildReport(): string {
     const body = [
       '## 问题描述',
       '（请在这里补充你遇到的现象）',
@@ -144,15 +142,32 @@ export default function SettingsScreen() {
       ...formatLogs(40).reverse(),
       '```',
     ].join('\n');
-    const trimmed = body.length > 5500 ? `${body.slice(0, 5500)}\n…（日志过长已截断）` : body;
-    const url =
-      'https://github.com/rexthelinebarrel/idea-bucket/issues/new' +
-      `?title=${encodeURIComponent('[Bug] App 内上报')}&body=${encodeURIComponent(trimmed)}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('无法打开浏览器', '请改用「分享诊断信息」。');
-    }
+    return body.length > 5500 ? `${body.slice(0, 5500)}\n…（日志过长已截断）` : body;
+  }
+
+  // 一键上报：诊断 + 日志打包。国内手机访问不了 GitHub，
+  // 所以提供「分享到微信/文件传输」和「GitHub issue」两条路。
+  function reportBug() {
+    Alert.alert('上报问题', '诊断信息和最近日志已打包好，选择上报方式：', [
+      {
+        text: '分享到微信/文件传输',
+        onPress: () => {
+          Share.share({ message: `【灵感桶问题上报】\n\n${buildReport()}` }).catch(() => {});
+        },
+      },
+      {
+        text: 'GitHub issue（需能访问）',
+        onPress: () => {
+          const url =
+            'https://github.com/rexthelinebarrel/idea-bucket/issues/new' +
+            `?title=${encodeURIComponent('[Bug] App 内上报')}&body=${encodeURIComponent(buildReport())}`;
+          Linking.openURL(url).catch(() => {
+            Alert.alert('无法打开浏览器', '可改用「分享到微信/文件传输」。');
+          });
+        },
+      },
+      { text: '取消', style: 'cancel' },
+    ]);
   }
 
   const isCloud = form.transcribeMode === 'cloud';
@@ -280,8 +295,8 @@ export default function SettingsScreen() {
         <Text style={styles.saveButtonText}>🐞 上报问题（带日志）</Text>
       </Pressable>
       <Text style={styles.note}>
-        跳转到 GitHub 新建 issue 页面，诊断信息和最近日志已预填好，确认提交即可；日志只含事件与错误，不含灵感内容和
-        Key。也可以用下面的按钮把诊断信息分享到别处。
+        点了会让你选上报方式：国内手机选「分享到微信/文件传输」，转到电脑发给开发者即可；
+        能访问 GitHub 的可以直接提 issue。日志只含事件与错误，不含灵感内容和 Key。
       </Text>
       {logLines.length > 0 && (
         <View style={styles.diagCard}>
