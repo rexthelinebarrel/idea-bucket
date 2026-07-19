@@ -1,8 +1,10 @@
 // 设置：AI 服务配置（OpenAI 兼容）+ 回收站入口。
 // API Key 只保存在本机 SQLite，不上传任何第三方。
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 
 import { colors } from '@/theme';
 import { listDeletedIdeas } from '@/lib/db';
@@ -19,6 +21,7 @@ export default function SettingsScreen() {
   const [form, setForm] = useState<AISettings>(() => getAISettings());
   const [saved, setSaved] = useState(false);
   const [binCount, setBinCount] = useState(0);
+  const [updateState, setUpdateState] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -31,6 +34,27 @@ export default function SettingsScreen() {
     saveAISettings({ ...form, baseUrl: form.baseUrl.trim(), apiKey: form.apiKey.trim() });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  // OTA 热更新：拉取云端推送的新版本（仅限 JS/资源改动；原生改动仍需重装 APK）
+  async function checkUpdate() {
+    setUpdateState('检查中…');
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        setUpdateState('发现新版本，下载中…');
+        await Updates.fetchUpdateAsync();
+        setUpdateState('');
+        Alert.alert('更新就绪', '重启应用以完成更新。', [
+          { text: '稍后', style: 'cancel' },
+          { text: '立即更新', onPress: () => Updates.reloadAsync() },
+        ]);
+      } else {
+        setUpdateState('已是最新');
+      }
+    } catch {
+      setUpdateState('检查失败（开发模式下不可用）');
+    }
   }
 
   return (
@@ -64,6 +88,16 @@ export default function SettingsScreen() {
         <Text style={styles.rowArrow}>›</Text>
       </Pressable>
       <Text style={styles.note}>删除的灵感保留 30 天，到期自动彻底清除。灵感和音频均保存在本机。</Text>
+
+      <Text style={styles.sectionTitle}>更新</Text>
+      <Pressable style={styles.row} onPress={checkUpdate}>
+        <Text style={styles.rowText}>🔄 检查更新{updateState ? `（${updateState}）` : ''}</Text>
+        <Text style={styles.rowArrow}>›</Text>
+      </Pressable>
+      <Text style={styles.note}>
+        当前版本 {Constants.expoConfig?.version ?? '未知'}。日常改进会通过云端推送，点这里即可拉取；
+        涉及原生功能的升级才需要重新安装 APK。
+      </Text>
     </ScrollView>
   );
 }
