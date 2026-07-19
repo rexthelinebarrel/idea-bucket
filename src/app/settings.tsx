@@ -21,6 +21,14 @@ import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 import { colors } from '@/theme';
 import { listDeletedIdeas, getSetting, setSetting, listLogs } from '@/lib/db';
 import { getAISettings, saveAISettings, type AISettings } from '@/lib/ai';
+import {
+  OFFLINE_MODELS,
+  downloadModel,
+  getActiveModelId,
+  setActiveModelId,
+  getModelState,
+  type ModelState,
+} from '@/lib/offline-stt';
 
 const FIELDS: {
   key: keyof AISettings;
@@ -44,6 +52,9 @@ export default function SettingsScreen() {
   const [services, setServices] = useState<string[]>([]);
   const [diag, setDiag] = useState<[string, string][]>([]);
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [activeId, setActiveId] = useState(() => getActiveModelId());
+  const [modelStates, setModelStates] = useState<Record<string, ModelState>>({});
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number | null>>({});
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
@@ -51,7 +62,7 @@ export default function SettingsScreen() {
       ['运行时版本', Updates.runtimeVersion ?? '未知'],
       ['更新批次', Updates.updateId ? Updates.updateId.slice(0, 8) : '内嵌包（未应用过 OTA）'],
       ['更新通道', Updates.channel || '未知'],
-      ['转写模式', s.transcribeMode === 'system' ? '系统识别' : '云端 API'],
+      ['转写模式', s.transcribeMode === 'offline' ? '离线引擎' : s.transcribeMode === 'system' ? '系统识别' : '云端 API'],
       ['识别服务数', String(svcCount)],
       ['最近识别错误', getSetting('last_speech_error') ?? '无'],
       ['最近更新检查', getSetting('last_update_check') ?? '无'],
@@ -74,6 +85,8 @@ export default function SettingsScreen() {
       setServices(svc);
       setDiag(buildDiag(s, svc.length));
       setLogLines(formatLogs(8));
+      setActiveId(getActiveModelId());
+      setModelStates(Object.fromEntries(OFFLINE_MODELS.map((m) => [m.id, getModelState(m.id)])));
     }, []),
   );
 
@@ -118,6 +131,21 @@ export default function SettingsScreen() {
       );
     }
     setDiag(buildDiag(form, services.length));
+  }
+
+  async function startDownload(id: string) {
+    setDownloadProgress((p) => ({ ...p, [id]: 0 }));
+    try {
+      await downloadModel(id, (prog) => setDownloadProgress((p) => ({ ...p, [id]: prog })));
+      setModelStates(Object.fromEntries(OFFLINE_MODELS.map((m) => [m.id, getModelState(m.id)])));
+      setActiveModelId(id);
+      setActiveId(id);
+      Alert.alert('下载完成', '离线模型已就绪，可以离线识别了。');
+    } catch (e) {
+      Alert.alert('下载失败', e instanceof Error ? e.message : '网络异常，请重试');
+    } finally {
+      setDownloadProgress((p) => ({ ...p, [id]: null }));
+    }
   }
 
   async function shareDiag() {
@@ -175,10 +203,11 @@ export default function SettingsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>转写模式</Text>
-      <View style={styles.modeRow}>
+      <View style={styles.modeRowWrap}>
         {(
           [
-            { key: 'system', label: '系统识别（免配置）' },
+            { key: 'offline', label: '离线引擎（内置）' },
+            { key: 'system', label: '系统识别' },
             { key: 'cloud', label: '云端 API' },
           ] as const
         ).map((m) => (
@@ -199,11 +228,58 @@ export default function SettingsScreen() {
         ))}
       </View>
       <Text style={styles.note}>
-        系统识别：调用手机自带的语音识别服务，无需配置任何 Key，装好就能用（国产机自带中文引擎）。
-        识别不了时，或想要更稳定的效果，再配下面的云端 API。
+        {form.transcribeMode === 'offline'
+          ? '离线引擎：内置 sherpa-onnx 本地模型，识别全程不联网、无需任何 Key；首次使用需下载一次模型。'
+          : form.transcribeMode === 'system'
+            ? '系统识别：调用手机自带的语音识别服务，免配置；识别不了时可换离线引擎或云端 API。'
+            : '云端 API：OpenAI 兼容转写接口，需在下方配置；效果稳定但走网络。'}
       </Text>
 
-      {!isCloud && (
+      {form.transcribeMode === 'offline' && (
+        <View>
+          <Text style={styles.sectionTitle}>离线模型</Text>
+          {OFFLINE_MODELS.map((m) => {
+            const state = modelStates[m.id] ?? 'missing';
+            const progress = downloadProgress[m.id];
+            return (
+              <Pressable
+                key={m.id}
+                style={[styles.modelCard, activeId === m.id && styles.modelCardActive]}
+                onPress={() => {
+                  setActiveModelId(m.id);
+                  setActiveId(m.id);
+                }}
+              >
+                <View style={styles.modelMain}>
+                  <Text style={styles.modelLabel}>
+                    {m.label}
+                    {activeId === m.id ? ' ✓' : ''}
+                  </Text>
+                  <Text style={styles.modelDesc}>{m.desc}</Text>
+                  <Text style={styles.modelState}>
+                    {state === 'ready' ? '已下载' : state === 'partial' ? '下载不完整' : '未下载'}
+                  </Text>
+                </View>
+                {state !== 'ready' &&
+                  (progress != null ? (
+                    <Text style={styles.dlProgress}>{Math.round(progress * 100)}%</Text>
+                  ) : (
+                    <Pressable
+                      style={styles.dlButton}
+                      onPress={() => startDownload(m.id)}
+                      disabled={Object.values(downloadProgress).some((v) => v != null)}
+                    >
+                      <Text style={styles.dlButtonText}>下载</Text>
+                    </Pressable>
+                  ))}
+              </Pressable>
+            );
+          })}
+          <Text style={styles.note}>模型只下载一次，之后识别全程离线；首次加载模型需几秒钟。</Text>
+        </View>
+      )}
+
+      {form.transcribeMode === 'system' && (
         <View>
           <Text style={styles.sectionTitle}>识别服务</Text>
           {services.length === 0 ? (
@@ -380,4 +456,28 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   shareButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
+  modelCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  modelCardActive: { borderColor: colors.accent },
+  modelMain: { flex: 1 },
+  modelLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  modelDesc: { color: colors.textDim, fontSize: 12, marginTop: 2, lineHeight: 17 },
+  modelState: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  dlButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  dlButtonText: { color: '#1A1206', fontWeight: '600', fontSize: 13 },
+  dlProgress: { color: colors.accent, fontSize: 14, fontWeight: '600' },
 });

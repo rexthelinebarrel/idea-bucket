@@ -1,8 +1,9 @@
 // 主界面：只有一个大按钮。按住说话，松手即走，整个投入 ≤ 5 秒。
-// 转写两种模式（设置页可切）：
-// - 系统识别（默认，免配置）：识别模块自己采集音频并实时转写，松手直接出文字
+// 三种转写模式（设置页可切）：
+// - 离线引擎（默认）：内置 sherpa-onnx 本地模型，全程不联网、无需任何 Key
+// - 系统识别：识别模块自己采集音频并实时转写，松手直接出文字
 // - 云端 API：录音先落盘即确认，转写走异步流水线（OpenAI 兼容接口）
-// 注意：两种模式互斥，绝不同时占用麦克风（多数设备不允许多路采集）。
+// 注意：系统识别与其他两种互斥，绝不同时占用麦克风（多数设备不允许多路采集）。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -23,7 +24,8 @@ import { countIdeas, createIdea, genId, setSetting, logEvent } from '@/lib/db';
 import { moveRecording } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
-import { getAISettings } from '@/lib/ai';
+import { getAISettings, type AISettings } from '@/lib/ai';
+import { getActiveModelId, getModelState } from '@/lib/offline-stt';
 
 export default function HomeScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -35,7 +37,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   // —— 系统识别模式的会话状态（全走 ref，避免高频识别事件触发重渲染）——
-  const modeRef = useRef<'system' | 'cloud'>('cloud');
+  const modeRef = useRef<AISettings['transcribeMode']>('cloud');
   const finalTextRef = useRef('');
   const interimTextRef = useRef('');
   const speechAudioRef = useRef<string | null>(null);
@@ -89,14 +91,21 @@ export default function HomeScreen() {
 
   async function handlePressIn() {
     const mode = getAISettings().transcribeMode;
+    if (mode === 'offline' && getModelState(getActiveModelId()) !== 'ready') {
+      Alert.alert('需要先下载离线模型', '离线识别首次使用前要下载模型（轻量版仅 22MB）。', [
+        { text: '取消', style: 'cancel' },
+        { text: '去下载', onPress: () => router.push('/settings') },
+      ]);
+      return;
+    }
     modeRef.current = mode;
     if (mode === 'system') await startSystemRecognition();
-    else await startCloudRecording();
+    else await startRecorder();
   }
 
   async function handlePressOut() {
     if (modeRef.current === 'system') await stopSystemRecognition();
-    else await stopCloudRecording();
+    else await stopRecorder();
   }
 
   // ---- 系统识别模式（免配置，松手即出文字）----
@@ -178,9 +187,9 @@ export default function HomeScreen() {
     showToast('已入桶 ✓');
   }
 
-  // ---- 云端 API 模式（录音落盘 + 异步转写）----
+  // ---- 录音模式（离线引擎 / 云端 API 共用：录音落盘，转写走异步流水线）----
 
-  async function startCloudRecording() {
+  async function startRecorder() {
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
@@ -197,7 +206,7 @@ export default function HomeScreen() {
     }
   }
 
-  async function stopCloudRecording() {
+  async function stopRecorder() {
     if (!recording) return;
     setRecording(false);
     const duration = Date.now() - startAt.current;
@@ -226,7 +235,7 @@ export default function HomeScreen() {
     }
     setCount(countIdeas());
     showToast('已入桶 ✓');
-    logEvent('idea', `入桶（cloud 模式，${duration}ms）`);
+    logEvent('idea', `入桶（${modeRef.current} 模式，${duration}ms）`);
     // 转写与标题生成走异步流水线，不阻塞下一次投入
     processIdea(id).catch(() => {});
   }

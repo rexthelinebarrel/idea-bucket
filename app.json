@@ -3,7 +3,7 @@
     "name": "灵感桶",
     "slug": "idea-bucket",
     "owner": "nachdenken",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ideabucket",
