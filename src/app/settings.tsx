@@ -1,10 +1,11 @@
 // 设置：AI 服务配置（OpenAI 兼容）+ 回收站入口。
 // API Key 只保存在本机 SQLite，不上传任何第三方。
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
+import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
 import { colors } from '@/theme';
 import { listDeletedIdeas } from '@/lib/db';
@@ -22,11 +23,19 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [binCount, setBinCount] = useState(0);
   const [updateState, setUpdateState] = useState('');
+  const [services, setServices] = useState<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       setForm(getAISettings());
       setBinCount(listDeletedIdeas().length);
+      if (Platform.OS === 'android') {
+        try {
+          setServices(getSpeechRecognitionServices());
+        } catch {
+          setServices([]);
+        }
+      }
     }, []),
   );
 
@@ -87,6 +96,41 @@ export default function SettingsScreen() {
         系统识别：调用手机自带的语音识别服务，无需配置任何 Key，装好就能用（国产机自带中文引擎）。
         识别不了时，或想要更稳定的效果，再配下面的云端 API。
       </Text>
+
+      {form.transcribeMode === 'system' && (
+        <View>
+          <Text style={styles.sectionTitle}>识别服务</Text>
+          {services.length === 0 ? (
+            <Text style={styles.note}>未发现可用的识别服务，请改用「云端 API」模式。</Text>
+          ) : (
+            <View style={styles.modeRowWrap}>
+              {['', ...services].map((pkg) => (
+                <Pressable
+                  key={pkg || 'default'}
+                  style={[
+                    styles.modeChip,
+                    form.speechServicePackage === pkg && styles.modeChipActive,
+                  ]}
+                  onPress={() => setForm({ ...form, speechServicePackage: pkg })}
+                >
+                  <Text
+                    style={[
+                      styles.modeChipText,
+                      form.speechServicePackage === pkg && styles.modeChipTextActive,
+                    ]}
+                  >
+                    {pkg === '' ? '系统默认' : pkg.split('.').pop()}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <Text style={styles.note}>
+            识别报"网络错误"时换一个服务试试：国内手机选国产厂商的服务（讯飞/小米/华为等）通常能走通，Google
+            的服务在国内网络不可用。选完记得点保存。
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>AI 服务</Text>
       <Text style={styles.note}>
@@ -157,6 +201,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: { color: '#1A1206', fontWeight: '700', fontSize: 15 },
   modeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  modeRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   modeChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,

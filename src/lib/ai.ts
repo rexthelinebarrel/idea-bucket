@@ -10,6 +10,8 @@ export interface AISettings {
   transcribeModel: string;
   /** system = 手机系统自带识别（免配置）；cloud = OpenAI 兼容转写接口 */
   transcribeMode: 'system' | 'cloud';
+  /** Android 识别服务包名，空串 = 系统默认服务。识别报网络错误时可换国产厂商服务 */
+  speechServicePackage: string;
 }
 
 const DEFAULT_SETTINGS: AISettings = {
@@ -18,6 +20,7 @@ const DEFAULT_SETTINGS: AISettings = {
   chatModel: 'gpt-4o-mini',
   transcribeModel: 'whisper-1',
   transcribeMode: 'system',
+  speechServicePackage: '',
 };
 
 const SETTINGS_KEY = 'ai_settings';

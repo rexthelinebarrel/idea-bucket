@@ -110,12 +110,16 @@ export default function HomeScreen() {
       interimTextRef.current = '';
       speechAudioRef.current = null;
       speechErrorRef.current = null;
+      const svcPkg = getAISettings().speechServicePackage;
       ExpoSpeechRecognitionModule.start({
         lang: 'zh-CN',
         interimResults: true,
         continuous: true,
         addsPunctuation: true,
         recordingOptions: { persist: true },
+        ...(Platform.OS === 'android' && svcPkg
+          ? { androidRecognitionServicePackage: svcPkg }
+          : {}),
       });
       startAt.current = Date.now();
       setRecording(true);
@@ -149,8 +153,11 @@ export default function HomeScreen() {
       .trim()
       .replace(/[，。、！？]+$/, '');
     if (!text) {
+      const err = speechErrorRef.current;
       showToast(
-        speechErrorRef.current ? `识别失败：${speechErrorRef.current}` : '没听清，再说一次？',
+        err
+          ? `识别失败：${err}（可在设置页换识别服务，或改用云端 API）`
+          : '没听清，再说一次？',
       );
       return;
     }
