@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { ErrorUtils } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
@@ -8,22 +7,44 @@ import Constants from 'expo-constants';
 import { colors } from '@/theme';
 import { logEvent } from '@/lib/db';
 
-export default function RootLayout() {
-  useEffect(() => {
-    logEvent(
-      'app',
-      `冷启动 v${Constants.expoConfig?.version ?? '?'} runtime=${Updates.runtimeVersion ?? '?'}`,
-    );
-    // 未捕获的 JS 错误落库，作为简易崩溃记录（随后交给系统默认处理器）
-    const prev = ErrorUtils.getGlobalHandler();
-    ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+// ErrorUtils 没有 react-native 具名导出，RN 运行时只挂在 global 上；
+// 整条诊断逻辑包在 try/catch 里——诊断绝不能让 App 起不来。
+function installCrashLogger() {
+  try {
+    const eu = (
+      globalThis as {
+        ErrorUtils?: {
+          getGlobalHandler?: () => ((e: Error, f?: boolean) => void) | undefined;
+          setGlobalHandler?: (h: (e: Error, f?: boolean) => void) => void;
+        };
+      }
+    ).ErrorUtils;
+    if (!eu?.getGlobalHandler || !eu?.setGlobalHandler) return;
+    const prev = eu.getGlobalHandler();
+    eu.setGlobalHandler((error: Error, isFatal?: boolean) => {
       try {
         logEvent('crash', `${isFatal ? 'FATAL' : 'js'} ${error?.message ?? String(error)}`, 'error');
       } catch {
         // 日志绝不影响主流程
       }
-      prev?.(error, isFatal);
+      if (typeof prev === 'function') prev(error, isFatal);
     });
+  } catch {
+    // 忽略
+  }
+}
+
+export default function RootLayout() {
+  useEffect(() => {
+    try {
+      logEvent(
+        'app',
+        `冷启动 v${Constants.expoConfig?.version ?? '?'} runtime=${Updates.runtimeVersion ?? '?'}`,
+      );
+      installCrashLogger();
+    } catch {
+      // 诊断绝不能让 App 起不来
+    }
   }, []);
 
   return (
