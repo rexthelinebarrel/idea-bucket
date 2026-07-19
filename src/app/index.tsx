@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/theme';
-import { countIdeas, createIdea, genId, setSetting } from '@/lib/db';
+import { countIdeas, createIdea, genId, setSetting, logEvent } from '@/lib/db';
 import { moveRecording } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
@@ -74,6 +74,7 @@ export default function HomeScreen() {
   useSpeechRecognitionEvent('error', (ev) => {
     speechErrorRef.current = ev.message || ev.error;
     setSetting('last_speech_error', `${new Date().toLocaleString()} ${ev.error}: ${ev.message}`);
+    logEvent('speech', `${ev.error}: ${ev.message}`, 'error');
   });
   useSpeechRecognitionEvent('end', () => {
     endSignalRef.current?.();
@@ -125,6 +126,7 @@ export default function HomeScreen() {
       startAt.current = Date.now();
       setRecording(true);
     } catch {
+      logEvent('speech', '系统识别启动失败（设备无可用识别服务）', 'error');
       Alert.alert(
         '系统识别不可用',
         '这台手机没有可用的语音识别服务。请到「设置」把转写模式改为云端 API（国内推荐硅基流动，免费）。',
@@ -155,6 +157,7 @@ export default function HomeScreen() {
       .replace(/[，。、！？]+$/, '');
     if (!text) {
       const err = speechErrorRef.current;
+      logEvent('speech', `未识别到文本（${duration}ms）${err ? ` ${err}` : ''}`, 'warn');
       showToast(
         err
           ? `识别失败：${err}（可在设置页换识别服务，或改用云端 API）`
@@ -170,6 +173,7 @@ export default function HomeScreen() {
       // 音频移动失败不阻塞入桶
     }
     createIdea({ id, title: generateTitle(text), audioUri: finalUri, transcript: text });
+    logEvent('idea', `入桶（system 模式，${duration}ms，${text.length} 字）`);
     setCount(countIdeas());
     showToast('已入桶 ✓');
   }
@@ -222,6 +226,7 @@ export default function HomeScreen() {
     }
     setCount(countIdeas());
     showToast('已入桶 ✓');
+    logEvent('idea', `入桶（cloud 模式，${duration}ms）`);
     // 转写与标题生成走异步流水线，不阻塞下一次投入
     processIdea(id).catch(() => {});
   }

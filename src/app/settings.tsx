@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -18,7 +19,7 @@ import Constants from 'expo-constants';
 import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
 import { colors } from '@/theme';
-import { listDeletedIdeas, getSetting, setSetting } from '@/lib/db';
+import { listDeletedIdeas, getSetting, setSetting, listLogs } from '@/lib/db';
 import { getAISettings, saveAISettings, type AISettings } from '@/lib/ai';
 
 const FIELDS: {
@@ -42,6 +43,7 @@ export default function SettingsScreen() {
   const [updateState, setUpdateState] = useState('');
   const [services, setServices] = useState<string[]>([]);
   const [diag, setDiag] = useState<[string, string][]>([]);
+  const [logLines, setLogLines] = useState<string[]>([]);
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
@@ -71,8 +73,17 @@ export default function SettingsScreen() {
       }
       setServices(svc);
       setDiag(buildDiag(s, svc.length));
+      setLogLines(formatLogs(8));
     }, []),
   );
+
+  function formatLogs(n: number): string[] {
+    return listLogs(n).map((l) => {
+      const t = new Date(l.ts);
+      const p = (x: number) => String(x).padStart(2, '0');
+      return `${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())} [${l.level}] ${l.tag} ${l.message}`;
+    });
+  }
 
   function save() {
     saveAISettings({ ...form, baseUrl: form.baseUrl.trim(), apiKey: form.apiKey.trim() });
@@ -115,6 +126,32 @@ export default function SettingsScreen() {
       await Share.share({ message: text });
     } catch {
       // 用户取消分享，忽略
+    }
+  }
+
+  // 一键上报：诊断 + 日志打包后跳转 GitHub 预填 issue。
+  // 公开仓库，提交前用户可以看到全部内容；日志只含事件与错误，不含灵感内容和 Key。
+  async function reportBug() {
+    const body = [
+      '## 问题描述',
+      '（请在这里补充你遇到的现象）',
+      '',
+      '## 诊断信息',
+      ...diag.map(([k, v]) => `- **${k}**：${v}`),
+      '',
+      '## 最近日志',
+      '```',
+      ...formatLogs(40).reverse(),
+      '```',
+    ].join('\n');
+    const trimmed = body.length > 5500 ? `${body.slice(0, 5500)}\n…（日志过长已截断）` : body;
+    const url =
+      'https://github.com/rexthelinebarrel/idea-bucket/issues/new' +
+      `?title=${encodeURIComponent('[Bug] App 内上报')}&body=${encodeURIComponent(trimmed)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('无法打开浏览器', '请改用「分享诊断信息」。');
     }
   }
 
@@ -239,10 +276,26 @@ export default function SettingsScreen() {
           </View>
         ))}
       </View>
-      <Pressable style={styles.saveButton} onPress={shareDiag}>
-        <Text style={styles.saveButtonText}>📤 分享诊断信息</Text>
+      <Pressable style={styles.saveButton} onPress={reportBug}>
+        <Text style={styles.saveButtonText}>🐞 上报问题（带日志）</Text>
       </Pressable>
-      <Text style={styles.note}>遇到任何异常：点上面按钮把诊断信息发给开发者（或直接截图本页），一次说清。</Text>
+      <Text style={styles.note}>
+        跳转到 GitHub 新建 issue 页面，诊断信息和最近日志已预填好，确认提交即可；日志只含事件与错误，不含灵感内容和
+        Key。也可以用下面的按钮把诊断信息分享到别处。
+      </Text>
+      {logLines.length > 0 && (
+        <View style={styles.diagCard}>
+          <Text style={styles.diagTitle}>最近日志</Text>
+          {logLines.map((line, i) => (
+            <Text key={i} style={styles.logLine} selectable>
+              {line}
+            </Text>
+          ))}
+        </View>
+      )}
+      <Pressable style={styles.shareButton} onPress={shareDiag}>
+        <Text style={styles.shareButtonText}>📤 分享诊断信息</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -301,4 +354,15 @@ const styles = StyleSheet.create({
   diagRow: { flexDirection: 'row', gap: 10 },
   diagKey: { color: colors.textDim, fontSize: 13, width: 92 },
   diagValue: { color: colors.text, fontSize: 13, flex: 1 },
+  diagTitle: { color: colors.textDim, fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  logLine: { color: colors.text, fontSize: 11, lineHeight: 16, fontFamily: 'monospace' },
+  shareButton: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  shareButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
 });

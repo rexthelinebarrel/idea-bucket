@@ -62,6 +62,14 @@ db.execSync(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    level TEXT NOT NULL DEFAULT 'info',
+    tag TEXT NOT NULL,
+    message TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs(ts);
 `);
 
 export function genId(): string {
@@ -247,4 +255,39 @@ export function setSetting(key: string, value: string): void {
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     [key, value],
   );
+}
+
+// ---- 日志（排障用。铁律：只记事件与错误，绝不记录灵感原文和 API Key）----
+
+export type LogLevel = 'info' | 'warn' | 'error';
+
+export interface LogRow {
+  id: number;
+  ts: number;
+  level: LogLevel;
+  tag: string;
+  message: string;
+}
+
+export function logEvent(tag: string, message: string, level: LogLevel = 'info'): void {
+  try {
+    db.runSync('INSERT INTO logs (ts, level, tag, message) VALUES (?, ?, ?, ?)', [
+      Date.now(),
+      level,
+      tag,
+      message.slice(0, 500),
+    ]);
+    // 环形缓冲：只保留最近 500 条
+    db.runSync('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY id DESC LIMIT 500)');
+  } catch {
+    // 日志绝不影响主流程
+  }
+}
+
+export function listLogs(limit = 200): LogRow[] {
+  const rows = db.getAllSync<{ id: number; ts: number; level: string; tag: string; message: string }>(
+    'SELECT * FROM logs ORDER BY id DESC LIMIT ?',
+    [limit],
+  );
+  return rows.map((r) => ({ ...r, level: r.level as LogLevel }));
 }
