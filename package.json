@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.7",
+    "@jamsch/expo-speech-recognition": "^0.2.15",
     "expo": "~57.0.7",
     "expo-audio": "~57.0.2",
     "expo-constants": "~57.0.6",

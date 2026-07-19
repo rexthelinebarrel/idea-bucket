@@ -59,9 +59,40 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.sectionTitle}>转写模式</Text>
+      <View style={styles.modeRow}>
+        {(
+          [
+            { key: 'system', label: '系统识别（免配置）' },
+            { key: 'cloud', label: '云端 API' },
+          ] as const
+        ).map((m) => (
+          <Pressable
+            key={m.key}
+            style={[styles.modeChip, form.transcribeMode === m.key && styles.modeChipActive]}
+            onPress={() => setForm({ ...form, transcribeMode: m.key })}
+          >
+            <Text
+              style={[
+                styles.modeChipText,
+                form.transcribeMode === m.key && styles.modeChipTextActive,
+              ]}
+            >
+              {m.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.note}>
+        系统识别：调用手机自带的语音识别服务，无需配置任何 Key，装好就能用（国产机自带中文引擎）。
+        识别不了时，或想要更稳定的效果，再配下面的云端 API。
+      </Text>
+
       <Text style={styles.sectionTitle}>AI 服务</Text>
       <Text style={styles.note}>
-        需兼容 OpenAI 接口（OpenAI、Groq、硅基流动等均可）。Key 仅保存在本机数据库。
+        需兼容 OpenAI 接口。云端转写和 AI 讨论都用这组配置；Key 仅保存在本机数据库。
+        国内推荐硅基流动（siliconflow.cn，免费额度）：地址填 https://api.siliconflow.cn/v1，转写模型以控制台为准（如
+        FunAudioLLM/SenseVoiceSmall）；海外可选 Groq 或 OpenAI。
       </Text>
       {FIELDS.map((f) => (
         <View key={f.key} style={styles.field}>
@@ -125,6 +156,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   saveButtonText: { color: '#1A1206', fontWeight: '700', fontSize: 15 },
+  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  modeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+  },
+  modeChipActive: { backgroundColor: colors.accent },
+  modeChipText: { fontSize: 13, color: colors.textDim },
+  modeChipTextActive: { color: '#1A1206', fontWeight: '600' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

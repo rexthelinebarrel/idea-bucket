@@ -43,6 +43,12 @@ npx expo start
 
 任何 OpenAI 兼容服务都能接入。例如 Groq（有免费额度）：地址填 `https://api.groq.com/openai/v1`，转写模型填 `whisper-large-v3`。
 
+### 国内用户（无需 Whisper API）
+
+- **免配置开箱即用**：默认转写模式是「系统识别」，直接调用手机自带的语音识别（小米/华为等国产机自带中文引擎），不需要任何 Key。
+- **想要云端转写**：推荐[硅基流动](https://siliconflow.cn)（国内直连、有免费额度），API 地址填 `https://api.siliconflow.cn/v1`，转写模型以控制台为准（如 `FunAudioLLM/SenseVoiceSmall`），对话模型可填免费的 Qwen 系列。
+- 转写模式在 App「设置」页随时切换。
+
 打正式 APK：
 
 ```bash

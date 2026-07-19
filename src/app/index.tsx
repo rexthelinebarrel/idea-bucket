@@ -1,6 +1,10 @@
 // 主界面：只有一个大按钮。按住说话，松手即走，整个投入 ≤ 5 秒。
+// 转写两种模式（设置页可切）：
+// - 系统识别（默认，免配置）：识别模块自己采集音频并实时转写，松手直接出文字
+// - 云端 API：录音先落盘即确认，转写走异步流水线（OpenAI 兼容接口）
+// 注意：两种模式互斥，绝不同时占用麦克风（多数设备不允许多路采集）。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import {
   useAudioRecorder,
@@ -8,13 +12,18 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
 } from 'expo-audio';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from '@jamsch/expo-speech-recognition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/theme';
 import { countIdeas, createIdea, genId } from '@/lib/db';
 import { moveRecording } from '@/lib/files';
-import { placeholderTitle } from '@/lib/title';
+import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
+import { getAISettings } from '@/lib/ai';
 
 export default function HomeScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -24,6 +33,14 @@ export default function HomeScreen() {
   const startAt = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
+
+  // —— 系统识别模式的会话状态（全走 ref，避免高频识别事件触发重渲染）——
+  const modeRef = useRef<'system' | 'cloud'>('cloud');
+  const finalTextRef = useRef('');
+  const interimTextRef = useRef('');
+  const speechAudioRef = useRef<string | null>(null);
+  const speechErrorRef = useRef<string | null>(null);
+  const endSignalRef = useRef<(() => void) | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -37,13 +54,121 @@ export default function HomeScreen() {
     };
   }, []);
 
+  useSpeechRecognitionEvent('result', (ev) => {
+    const t = ev.results[0]?.transcript ?? '';
+    if (!t) return;
+    // iOS 每次返回全量文本；Android 按段落返回，最终结果需要拼接
+    if (Platform.OS === 'ios') {
+      finalTextRef.current = t;
+      interimTextRef.current = '';
+    } else if (ev.isFinal) {
+      finalTextRef.current = `${finalTextRef.current}${t}，`;
+      interimTextRef.current = '';
+    } else {
+      interimTextRef.current = t;
+    }
+  });
+  useSpeechRecognitionEvent('audioend', (ev) => {
+    if (ev.uri) speechAudioRef.current = ev.uri;
+  });
+  useSpeechRecognitionEvent('error', (ev) => {
+    speechErrorRef.current = ev.message || ev.error;
+  });
+  useSpeechRecognitionEvent('end', () => {
+    endSignalRef.current?.();
+    endSignalRef.current = null;
+  });
+
   function showToast(text: string) {
     setToast(text);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }
 
-  async function startRecording() {
+  async function handlePressIn() {
+    const mode = getAISettings().transcribeMode;
+    modeRef.current = mode;
+    if (mode === 'system') await startSystemRecognition();
+    else await startCloudRecording();
+  }
+
+  async function handlePressOut() {
+    if (modeRef.current === 'system') await stopSystemRecognition();
+    else await stopCloudRecording();
+  }
+
+  // ---- 系统识别模式（免配置，松手即出文字）----
+
+  async function startSystemRecognition() {
+    try {
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('需要麦克风权限', '请在系统设置中允许灵感桶使用麦克风。');
+        return;
+      }
+      finalTextRef.current = '';
+      interimTextRef.current = '';
+      speechAudioRef.current = null;
+      speechErrorRef.current = null;
+      ExpoSpeechRecognitionModule.start({
+        lang: 'zh-CN',
+        interimResults: true,
+        continuous: true,
+        addsPunctuation: true,
+        recordingOptions: { persist: true },
+      });
+      startAt.current = Date.now();
+      setRecording(true);
+    } catch {
+      Alert.alert(
+        '系统识别不可用',
+        '这台手机没有可用的语音识别服务。请到「设置」把转写模式改为云端 API（国内推荐硅基流动，免费）。',
+      );
+    }
+  }
+
+  async function stopSystemRecognition() {
+    if (!recording) return;
+    setRecording(false);
+    const duration = Date.now() - startAt.current;
+    if (duration < 600) {
+      ExpoSpeechRecognitionModule.abort();
+      showToast('太短了，按住说话');
+      return;
+    }
+    ExpoSpeechRecognitionModule.stop();
+    // 等最终结果（end 事件），最多 3 秒；超时就用已有的文本
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 3000);
+      endSignalRef.current = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    const text = `${finalTextRef.current}${interimTextRef.current}`
+      .trim()
+      .replace(/[，。、！？]+$/, '');
+    if (!text) {
+      showToast(
+        speechErrorRef.current ? `识别失败：${speechErrorRef.current}` : '没听清，再说一次？',
+      );
+      return;
+    }
+    const id = genId();
+    let finalUri = '';
+    try {
+      if (speechAudioRef.current) finalUri = moveRecording(speechAudioRef.current, id);
+    } catch {
+      // 音频移动失败不阻塞入桶
+    }
+    createIdea({ id, title: generateTitle(text), audioUri: finalUri, transcript: text });
+    setCount(countIdeas());
+    showToast('已入桶 ✓');
+  }
+
+  // ---- 云端 API 模式（录音落盘 + 异步转写）----
+
+  async function startCloudRecording() {
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
@@ -60,7 +185,7 @@ export default function HomeScreen() {
     }
   }
 
-  async function stopRecording() {
+  async function stopCloudRecording() {
     if (!recording) return;
     setRecording(false);
     const duration = Date.now() - startAt.current;
@@ -100,8 +225,8 @@ export default function HomeScreen() {
 
       <View style={styles.middle}>
         <Pressable
-          onPressIn={startRecording}
-          onPressOut={stopRecording}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
           style={[styles.micButton, recording && styles.micButtonActive]}
         >
           <Text style={styles.micIcon}>🎤</Text>

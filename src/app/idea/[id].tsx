@@ -122,8 +122,15 @@ export default function IdeaDetailScreen() {
     if (!idea || busy) return;
     setBusy('retry');
     await processIdea(idea.id);
+    const fresh = getIdea(idea.id);
     load();
     setBusy(null);
+    if (fresh?.transcribeState === 'failed') {
+      Alert.alert(
+        '转写仍然失败',
+        '云端转写需要先在「设置」配置 API Key（国内推荐硅基流动，免费）。',
+      );
+    }
   }
 
   function confirmDelete() {

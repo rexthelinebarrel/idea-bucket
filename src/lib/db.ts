@@ -98,11 +98,24 @@ function rowToIdea(r: IdeaRow): Idea {
   };
 }
 
-export function createIdea(fields: { id: string; title: string; audioUri: string }): void {
+export function createIdea(fields: {
+  id: string;
+  title: string;
+  audioUri: string;
+  transcript?: string;
+}): void {
   const now = Date.now();
   db.runSync(
-    'INSERT INTO ideas (id, title, audio_uri, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-    [fields.id, fields.title, fields.audioUri, now, now],
+    'INSERT INTO ideas (id, title, transcript, audio_uri, transcribe_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [
+      fields.id,
+      fields.title,
+      fields.transcript ?? '',
+      fields.audioUri,
+      fields.transcript ? 'ok' : 'pending',
+      now,
+      now,
+    ],
   );
 }
 

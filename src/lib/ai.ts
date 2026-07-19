@@ -8,6 +8,8 @@ export interface AISettings {
   apiKey: string;
   chatModel: string;
   transcribeModel: string;
+  /** system = 手机系统自带识别（免配置）；cloud = OpenAI 兼容转写接口 */
+  transcribeMode: 'system' | 'cloud';
 }
 
 const DEFAULT_SETTINGS: AISettings = {
@@ -15,6 +17,7 @@ const DEFAULT_SETTINGS: AISettings = {
   apiKey: '',
   chatModel: 'gpt-4o-mini',
   transcribeModel: 'whisper-1',
+  transcribeMode: 'system',
 };
 
 const SETTINGS_KEY = 'ai_settings';
