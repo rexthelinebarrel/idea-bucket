@@ -1,8 +1,8 @@
 // 离线 STT：sherpa-onnx 本地引擎（react-native-sherpa-onnx TurboModule）。
 // 模型按需下载到 document/models/，识别全程不联网、不依赖系统识别服务和任何 API Key。
 // 下载源优先 hf-mirror（国内可达），失败回退 huggingface。
-import { createSTT, type SttEngine } from 'react-native-sherpa-onnx/stt';
-import { convertAudioToWav16k } from 'react-native-sherpa-onnx/audio';
+import { createStreamingSTT, type StreamingSttEngine } from 'react-native-sherpa-onnx/stt';
+import { decodeAudioFileToFloatSamples } from 'react-native-sherpa-onnx/audio';
 import { File, Directory, Paths } from 'expo-file-system';
 
 import { getSetting, setSetting, logEvent } from './db';
@@ -140,7 +140,9 @@ export function deleteModel(id: string): void {
 }
 
 // —— 引擎单例：模型加载耗时几秒，加载一次常驻复用 ——
-let engine: SttEngine | null = null;
+// 注意：两个内置模型都是流式（streaming）zipformer，必须用 OnlineRecognizer 路径，
+// 不能用离线 transcribeFile（会报维度不匹配）。流程：解码 m4a → 分块喂样本 → 收尾解码。
+let engine: StreamingSttEngine | null = null;
 let engineModelId: string | null = null;
 
 export async function transcribeOffline(audioUri: string): Promise<string> {
@@ -155,27 +157,30 @@ export async function transcribeOffline(audioUri: string): Promise<string> {
     }
     const path = stripScheme(modelDir(modelId).uri);
     logEvent('stt', `加载离线模型 ${modelId}`);
-    engine = await createSTT({
+    engine = await createStreamingSTT({
       modelPath: { type: 'file', path },
       modelType: 'auto',
-      preferInt8: true,
     });
     engineModelId = modelId;
   }
   const t0 = Date.now();
-  // sherpa-onnx 只读 WAV：先把录音（m4a/AAC）转成 16kHz WAV 再识别
-  const wav = new File(Paths.cache, `stt-${Date.now()}.wav`);
-  await convertAudioToWav16k(stripScheme(audioUri), stripScheme(wav.uri));
-  let result;
+  const { samples } = await decodeAudioFileToFloatSamples(stripScheme(audioUri), 16000);
+  const stream = await engine.createStream();
   try {
-    result = await engine.transcribeFile(stripScheme(wav.uri));
-  } finally {
-    try {
-      if (wav.exists) wav.delete();
-    } catch {
-      // 临时文件清不掉就算了
+    // 分块喂入（每块约 1 秒），避免超大数组一次过桥
+    const CHUNK = 16000;
+    for (let i = 0; i < samples.length; i += CHUNK) {
+      await stream.acceptWaveform(samples.slice(i, i + CHUNK), 16000);
     }
+    await stream.inputFinished();
+    // 收尾：把剩余可解码的音频全部解码，再取最终结果
+    while (await stream.isReady()) {
+      await stream.decode();
+    }
+    const result = await stream.getResult();
+    logEvent('stt', `离线识别完成（${Date.now() - t0}ms）`);
+    return (result.text ?? '').trim();
+  } finally {
+    await stream.release().catch(() => {});
   }
-  logEvent('stt', `离线识别完成（${Date.now() - t0}ms）`);
-  return (result.text ?? '').trim();
 }
