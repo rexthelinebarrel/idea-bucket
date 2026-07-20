@@ -247,3 +247,23 @@ v1 专注移动端。v2 才上电脑端。
 2. 优先实现核心体验闭环：录音 → 转写 → 标题生成 → 列表查看 → 详情
 3. 图谱和 AI 连接可在基础闭环跑通后再迭代
 4. 如果有不确定的设计细节，基于上述产品理念自行判断，不需要逐一确认
+
+---
+
+## 当前状态快照（2026-07-20，新会话来此时先读这段，可省大量上下文）
+
+- 仓库：https://github.com/rexthelinebarrel/idea-bucket （master，MIT，公开）
+- 技术栈：Expo SDK 57 / RN 0.86 / TypeScript，expo-router（src/ 目录），expo-sqlite + expo-file-system，expo-audio
+- **转写三模式**（设置页可切）：
+  - 离线引擎（默认）：react-native-sherpa-onnx **流式** zipformer（必须用 OnlineRecognizer 路径，不能用离线 transcribeFile），模型 22MB 中文轻量 / 188MB 中英双语，经 hf-mirror 国内镜像下载
+  - 系统识别：@jamsch/expo-speech-recognition（识别服务可手动切换）
+  - 云端 API：OpenAI 兼容（硅基流动/Groq/OpenAI 均可，设置页可配）
+- 已实现：极简录音入桶、本地标题算法（src/lib/title.ts）、列表（推荐/时间/状态排序+搜索筛选）、详情（回放/AI 讨论/手动关联/状态流转）、30 天回收站、SQLite 日志系统（环形 500 条）、设置页诊断信息 + 一键上报（微信/GitHub 双通道）
+- **更新机制**：仓库根目录 release.json（经 jsDelivr 拉取）→ 应用内下载 APK → 系统安装器确认；版本号唯一来源 `src/version.ts`；出包 `npx eas build --platform android --profile preview`（EAS owner: nachdenken，已登录）
+- 版本规则：每次发版必递增（修复=补丁位 / 功能=次版本位 / 破坏=主版本位），出包后必须同步 release.json 并推送
+- **教训（勿重复踩坑）**：
+  1. react-native 没有 ErrorUtils 具名导出（只在 globalThis 上，曾因它 OTA 变砖）
+  2. sherpa-onnx 离线识别器不吃流式模型（报维度错误 Got: xxx Expected: 39）
+  3. 版本号参与 fingerprint 计算 → EAS Update OTA 与"版本号递增"结构性冲突 → OTA 已弃用
+  4. eas update 必须带 `--platform android`（本项目不发 web 端，expo-sqlite web 依赖不全）
+- 待办：见 PROJECT.md「更新计划（backlog）」

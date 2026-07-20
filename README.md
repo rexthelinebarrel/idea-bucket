@@ -57,13 +57,7 @@ npx expo start
 npx eas build --platform android --profile preview   # 需要 Expo 账号，产物为可直装的 APK
 ```
 
-推送 OTA 热更新（JS/资源改动，不重装 APK）：
-
-```bash
-npx eas update --branch preview --environment preview --platform android -m "更新说明"
-# 注意：必须带 --platform android。本项目不发布 web 端
-# （expo-sqlite 的 web 依赖不完整，全平台导出会失败）。
-```
+应用内更新（标准安卓流程）：检查更新 → 拉取仓库根目录 `release.json` → 下载 APK → 系统安装器确认。每次出包后记得同步更新 `release.json`（version / apkUrl / notes）并推送。
 
 ## 技术栈
 

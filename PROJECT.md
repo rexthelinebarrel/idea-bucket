@@ -154,13 +154,26 @@ vibecoding 过程中，灵感来得很随机（走路、洗澡、临睡前），
 
 ## 版本与发布规则（已定）
 
-- **每次推送（OTA 或 APK）版本号必须递增**，按变更幅度选小数位：
-  - 修复/小调整 → 补丁位（0.3.x）
-  - 新功能 → 次版本位（0.x.0）
-  - 破坏性变更 → 主版本位（x.0.0）
-- runtimeVersion 用 **fingerprint 策略**：版本号与 OTA 兼容性解耦——纯 JS 改动指纹不变、OTA 直达；动原生依赖指纹才变、必须出新 APK（覆盖安装，数据保留）
-- OTA 发布命令：`npx eas update --branch preview --environment preview --platform android -m "说明"`（必须带 `--platform android`，本项目不发 web 端）
-- 出包命令：`npx eas build --platform android --profile preview`
+- **每次发版版本号必须递增**：修复/小调整 → 补丁位（0.3.x），新功能 → 次版本位（0.x.0），破坏性变更 → 主版本位
+- **更新机制（0.4.0 起，标准安卓流程）**：App 内检查更新 → 拉取仓库根目录 `release.json`（经 jsDelivr 镜像，国内手机可达）→ 有新版本则应用内下载 APK → 系统安装器弹窗，用户确认后安装。不做 OTA 静默自更新
+- **每次出 APK 后必须同步更新 `release.json`**（version / apkUrl / notes）并推送仓库
+- 版本号唯一权威来源：`src/version.ts`（不读构建期嵌入的静态值）
+- 出包命令：`npx eas build --platform android --profile preview`（EAS 项目 owner：nachdenken）
+- （历史教训：曾用 EAS Update OTA + fingerprint runtime，因"版本号参与指纹计算"导致版本递增与 OTA 匹配存在结构性冲突，且用户要求系统安装确认流程，已弃用）
+
+## 更新计划（backlog，按优先级）
+
+1. **前端界面调整**：主界面/列表/详情的视觉与交互打磨（需求收集中）
+2. **AI 自动连接（v2 核心，"类 Obsidian"灵感连接）**
+   - 新灵感入桶后调 embeddings 接口（OpenAI 兼容；硅基流动有免费 BGE 系列）生成向量，本地 SQLite 存储
+   - 与桶内灵感做余弦相似度，超阈值候选对交给 LLM 判定连接类型（合并/演化/碰撞）
+   - 判定进通知队列，用户确认后建立连接（防误连）
+   - 成本：每条灵感一次 embedding（≈免费）+ 仅候选对调 LLM（极省 token）
+3. **图谱视图**：力导向布局渲染节点+三种连线（合并/演化/碰撞），手机端辅助 tab
+4. **导出项目 .md**：框选关联灵感，LLM 综合生成结构化项目文档喂给工作 agent
+5. **每日通知推送**：本地定时通知（不依赖推送服务），推送有信息量的连接发现
+6. **日志上报升级**：Gitee 镜像仓库，国内用户提 issue 免微信中转
+7. **云同步 + 电脑端只读图谱**：v2 后期
 
 ## 技术选型（v1 已定）
 
