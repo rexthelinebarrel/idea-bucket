@@ -3,7 +3,7 @@
     "name": "灵感桶",
     "slug": "idea-bucket",
     "owner": "nachdenken",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ideabucket",
@@ -12,7 +12,8 @@
       "policy": "fingerprint"
     },
     "updates": {
-      "url": "https://u.expo.dev/65173909-5ce6-413f-a828-97925e43737b"
+      "url": "https://u.expo.dev/65173909-5ce6-413f-a828-97925e43737b",
+      "checkAutomatically": "NEVER"
     },
     "ios": {
       "icon": "./assets/expo.icon"
@@ -30,7 +31,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
     },
     "plugins": [

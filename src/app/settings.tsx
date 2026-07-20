@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
-import Constants from 'expo-constants';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
 import { colors } from '@/theme';
@@ -29,6 +31,7 @@ import {
   getModelState,
   type ModelState,
 } from '@/lib/offline-stt';
+import { APP_VERSION } from '@/version';
 
 const FIELDS: {
   key: keyof AISettings;
@@ -44,11 +47,32 @@ const FIELDS: {
   { key: 'transcribeModel', label: '转写模型', placeholder: 'whisper-1', cloudOnly: true },
 ];
 
+interface ReleaseInfo {
+  version: string;
+  apkUrl: string;
+  notes: string;
+  publishedAt?: string;
+}
+
+// 版本清单放在仓库里，经 jsDelivr 拉取（GitHub 直连在国内手机上不可达，jsDelivr 是 CDN 镜像）
+const RELEASE_URL = 'https://cdn.jsdelivr.net/gh/rexthelinebarrel/idea-bucket@master/release.json';
+
+function isNewer(remote: string, local: string): boolean {
+  const a = remote.split('.').map(Number);
+  const b = local.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
 export default function SettingsScreen() {
   const [form, setForm] = useState<AISettings>(() => getAISettings());
   const [saved, setSaved] = useState(false);
   const [binCount, setBinCount] = useState(0);
   const [updateState, setUpdateState] = useState('');
+  const [release, setRelease] = useState<ReleaseInfo | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [services, setServices] = useState<string[]>([]);
   const [diag, setDiag] = useState<[string, string][]>([]);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -58,7 +82,7 @@ export default function SettingsScreen() {
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
-      ['App 版本', Constants.expoConfig?.version ?? '未知'],
+      ['App 版本', APP_VERSION],
       ['运行时版本', Updates.runtimeVersion ?? '未知'],
       ['更新批次', Updates.updateId ? Updates.updateId.slice(0, 8) : '内嵌包（未应用过 OTA）'],
       ['更新通道', Updates.channel || '未知'],
@@ -104,21 +128,19 @@ export default function SettingsScreen() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  // OTA 热更新：拉取云端推送的新版本（仅限 JS/资源改动；原生改动仍需重装 APK）
+  // 标准安卓更新流程：拉版本清单 → 下载 APK → 系统安装器确认（不做静默自更新）
   async function checkUpdate() {
     setUpdateState('检查中…');
+    setRelease(null);
     const stamp = () => new Date().toLocaleString();
     try {
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
-        setUpdateState('发现新版本，下载中…');
-        await Updates.fetchUpdateAsync();
-        setSetting('last_update_check', `${stamp()} 拉到新版本`);
-        setUpdateState('');
-        Alert.alert('更新就绪', '重启应用以完成更新。', [
-          { text: '稍后', style: 'cancel' },
-          { text: '立即更新', onPress: () => Updates.reloadAsync() },
-        ]);
+      const res = await fetch(`${RELEASE_URL}?t=${Date.now()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const info = (await res.json()) as ReleaseInfo;
+      if (isNewer(info.version, APP_VERSION)) {
+        setRelease(info);
+        setUpdateState(`发现新版本 ${info.version}`);
+        setSetting('last_update_check', `${stamp()} 发现新版本 ${info.version}`);
       } else {
         setUpdateState('已是最新');
         setSetting('last_update_check', `${stamp()} 已是最新`);
@@ -131,6 +153,32 @@ export default function SettingsScreen() {
       );
     }
     setDiag(buildDiag(form, services.length));
+  }
+
+  async function downloadAndInstall() {
+    if (!release || downloading) return;
+    setDownloading(true);
+    setUpdateState('下载中…（包较大，请保持前台）');
+    try {
+      const dest = new File(Paths.cache, `idea-bucket-${release.version}.apk`);
+      if (dest.exists) dest.delete();
+      const apk = await File.downloadFileAsync(release.apkUrl, dest);
+      if ((apk.size ?? 0) === 0) throw new Error('下载内容为空');
+      setUpdateState('下载完成，调起安装…');
+      const contentUri = await FileSystemLegacy.getContentUriAsync(apk.uri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        type: 'application/vnd.android.package-archive',
+        // FLAG_GRANT_READ_URI_PERMISSION | FLAG_ACTIVITY_NEW_TASK，弹出系统安装确认
+        flags: 1 | 268435456,
+      });
+      setUpdateState('请在系统弹窗中确认安装');
+    } catch (e) {
+      setUpdateState('下载/安装失败');
+      Alert.alert('更新失败', e instanceof Error ? e.message : '网络异常，请稍后重试');
+    } finally {
+      setDownloading(false);
+    }
   }
 
   async function startDownload(id: string) {
@@ -351,9 +399,24 @@ export default function SettingsScreen() {
         <Text style={styles.rowText}>🔄 检查更新{updateState ? `（${updateState}）` : ''}</Text>
         <Text style={styles.rowArrow}>›</Text>
       </Pressable>
+      {release && (
+        <View style={styles.diagCard}>
+          <Text style={styles.releaseTitle}>新版本 {release.version}</Text>
+          {!!release.notes && <Text style={styles.note}>{release.notes}</Text>}
+          <Pressable
+            style={styles.saveButton}
+            onPress={downloadAndInstall}
+            disabled={downloading}
+          >
+            <Text style={styles.saveButtonText}>
+              {downloading ? '下载中…' : '下载并安装'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
       <Text style={styles.note}>
-        当前版本 {Constants.expoConfig?.version ?? '未知'}。日常改进会通过云端推送，点这里即可拉取；
-        涉及原生功能的升级才需要重新安装 APK。
+        当前版本 {APP_VERSION}。更新走标准安卓流程：下载安装包 → 系统弹窗确认 → 完成安装，App
+        不会自动重启替换。
       </Text>
 
       <Text style={styles.sectionTitle}>诊断信息</Text>
@@ -480,4 +543,5 @@ const styles = StyleSheet.create({
   },
   dlButtonText: { color: '#1A1206', fontWeight: '600', fontSize: 13 },
   dlProgress: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  releaseTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
 });
