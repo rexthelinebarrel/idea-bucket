@@ -1,0 +1,6 @@
+{
+  "version": "0.4.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/Rx4yDJ-_q3vFmLz3USaLK8RzklWa_rs0fMF_PgO7gOs.apk",
+  "notes": "更新机制改为标准安卓流程：应用内下载 APK，系统弹窗确认安装，不再静默自更新。",
+  "publishedAt": "2026-07-20"
+}
