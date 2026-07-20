@@ -152,6 +152,16 @@ vibecoding 过程中，灵感来得很随机（走路、洗澡、临睡前），
 
 ---
 
+## 版本与发布规则（已定）
+
+- **每次推送（OTA 或 APK）版本号必须递增**，按变更幅度选小数位：
+  - 修复/小调整 → 补丁位（0.3.x）
+  - 新功能 → 次版本位（0.x.0）
+  - 破坏性变更 → 主版本位（x.0.0）
+- runtimeVersion 用 **fingerprint 策略**：版本号与 OTA 兼容性解耦——纯 JS 改动指纹不变、OTA 直达；动原生依赖指纹才变、必须出新 APK（覆盖安装，数据保留）
+- OTA 发布命令：`npx eas update --branch preview --environment preview --platform android -m "说明"`（必须带 `--platform android`，本项目不发 web 端）
+- 出包命令：`npx eas build --platform android --profile preview`
+
 ## 技术选型（v1 已定）
 
 - 框架：Expo / React Native + TypeScript（SDK 57，expo-router，src/ 目录）
