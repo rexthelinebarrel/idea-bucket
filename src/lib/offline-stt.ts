@@ -2,6 +2,7 @@
 // 模型按需下载到 document/models/，识别全程不联网、不依赖系统识别服务和任何 API Key。
 // 下载源优先 hf-mirror（国内可达），失败回退 huggingface。
 import { createSTT, type SttEngine } from 'react-native-sherpa-onnx/stt';
+import { convertAudioToWav16k } from 'react-native-sherpa-onnx/audio';
 import { File, Directory, Paths } from 'expo-file-system';
 
 import { getSetting, setSetting, logEvent } from './db';
@@ -162,7 +163,19 @@ export async function transcribeOffline(audioUri: string): Promise<string> {
     engineModelId = modelId;
   }
   const t0 = Date.now();
-  const result = await engine.transcribeFile(stripScheme(audioUri));
+  // sherpa-onnx 只读 WAV：先把录音（m4a/AAC）转成 16kHz WAV 再识别
+  const wav = new File(Paths.cache, `stt-${Date.now()}.wav`);
+  await convertAudioToWav16k(stripScheme(audioUri), stripScheme(wav.uri));
+  let result;
+  try {
+    result = await engine.transcribeFile(stripScheme(wav.uri));
+  } finally {
+    try {
+      if (wav.exists) wav.delete();
+    } catch {
+      // 临时文件清不掉就算了
+    }
+  }
   logEvent('stt', `离线识别完成（${Date.now() - t0}ms）`);
   return (result.text ?? '').trim();
 }
