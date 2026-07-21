@@ -1,6 +1,6 @@
 {
-  "version": "0.6.0",
-  "apkUrl": "https://expo.dev/artifacts/eas/yXIuv2GSRa5oN-HqAYWHkbkzwbQqUvg90N72heA8P1k.apk",
-  "notes": "新版本主动推送：打开 App 自动检查，发现新版本弹系统通知，点击直达更新；版本清单纯量多镜像容灾。",
-  "publishedAt": "2026-07-20"
+  "version": "0.6.1",
+  "apkUrl": "https://expo.dev/artifacts/eas/ZWDhL8gJj8z9tuCju1aJMVbiVQsTFJjnzGPFncIgzlA.apk",
+  "notes": "修复版本发现：多镜像并发取最大版本，CDN 单节点缓存旧数据不再影响检查更新。",
+  "publishedAt": "2026-07-21"
 }
