@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
+import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
 import { colors } from '@/theme';
 import { logEvent } from '@/lib/db';
 import { backfillKeywordsAndDetect } from '@/lib/pipeline';
+import { checkForUpdateAndNotify } from '@/lib/updater';
 
 // ErrorUtils 没有 react-native 具名导出，RN 运行时只挂在 global 上；
 // 整条诊断逻辑包在 try/catch 里——诊断绝不能让 App 起不来。
@@ -45,9 +47,22 @@ export default function RootLayout() {
       installCrashLogger();
       // 老灵感关键词回填 + 候选检测 + 终审批次（后台静默跑，失败不影响启动）
       backfillKeywordsAndDetect().catch(() => {});
+      // 有新版本时弹系统通知（每个版本只推一次）
+      checkForUpdateAndNotify().catch(() => {});
     } catch {
       // 诊断绝不能让 App 起不来
     }
+  }, []);
+
+  useEffect(() => {
+    // 通知点击：跳设置页走"下载并安装 → 系统确认"流程
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const data = resp.notification.request.content.data as
+        | { navigateTo?: string }
+        | undefined;
+      if (data?.navigateTo) router.push(data.navigateTo as '/settings');
+    });
+    return () => sub.remove();
   }, []);
 
   return (

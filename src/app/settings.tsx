@@ -32,6 +32,7 @@ import {
   type ModelState,
 } from '@/lib/offline-stt';
 import { APP_VERSION } from '@/version';
+import { fetchLatestRelease, hasNewerRelease, type ReleaseInfo } from '@/lib/release';
 
 const FIELDS: {
   key: keyof AISettings;
@@ -46,25 +47,6 @@ const FIELDS: {
   { key: 'chatModel', label: '对话模型', placeholder: 'gpt-4o-mini' },
   { key: 'transcribeModel', label: '转写模型', placeholder: 'whisper-1', cloudOnly: true },
 ];
-
-interface ReleaseInfo {
-  version: string;
-  apkUrl: string;
-  notes: string;
-  publishedAt?: string;
-}
-
-// 版本清单放在仓库里，经 jsDelivr 拉取（GitHub 直连在国内手机上不可达，jsDelivr 是 CDN 镜像）
-const RELEASE_URL = 'https://cdn.jsdelivr.net/gh/rexthelinebarrel/idea-bucket@master/release.json';
-
-function isNewer(remote: string, local: string): boolean {
-  const a = remote.split('.').map(Number);
-  const b = local.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
-  }
-  return false;
-}
 
 export default function SettingsScreen() {
   const [form, setForm] = useState<AISettings>(() => getAISettings());
@@ -134,10 +116,8 @@ export default function SettingsScreen() {
     setRelease(null);
     const stamp = () => new Date().toLocaleString();
     try {
-      const res = await fetch(`${RELEASE_URL}?t=${Date.now()}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const info = (await res.json()) as ReleaseInfo;
-      if (isNewer(info.version, APP_VERSION)) {
+      const info = await fetchLatestRelease();
+      if (hasNewerRelease(info)) {
         setRelease(info);
         setUpdateState(`发现新版本 ${info.version}`);
         setSetting('last_update_check', `${stamp()} 发现新版本 ${info.version}`);

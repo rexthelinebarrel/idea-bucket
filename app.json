@@ -3,7 +3,7 @@
     "name": "灵感桶",
     "slug": "idea-bucket",
     "owner": "nachdenken",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ideabucket",
@@ -58,7 +58,8 @@
           "speechRecognitionPermission": "允许灵感桶使用语音识别，把语音转成文字。",
           "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,
