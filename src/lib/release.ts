@@ -24,21 +24,25 @@ export function isNewer(remote: string, local: string): boolean {
   return false;
 }
 
-/** 依次尝试多个镜像拉取最新版本清单，全部失败才抛错 */
+/** 并发拉取全部镜像，取版本号最高的一份。
+ *  不能"首个成功即返回"：jsDelivr 单节点可能长期缓存旧版本（HTTP 200 但数据陈旧），
+ *  只有跨节点取最大版本号才可靠。 */
 export async function fetchLatestRelease(): Promise<ReleaseInfo> {
-  let lastErr: unknown = null;
-  for (const base of RELEASE_URLS) {
-    try {
+  const results = await Promise.allSettled(
+    RELEASE_URLS.map(async (base) => {
       const res = await fetch(`${base}?t=${Date.now()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const info = (await res.json()) as ReleaseInfo;
       if (!info?.version || !info?.apkUrl) throw new Error('清单格式异常');
       return info;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('版本清单拉取失败');
+    }),
+  );
+  const valid = results
+    .filter((r): r is PromiseFulfilledResult<ReleaseInfo> => r.status === 'fulfilled')
+    .map((r) => r.value);
+  if (valid.length === 0) throw new Error('版本清单拉取失败（所有镜像不可达）');
+  valid.sort((a, b) => (isNewer(a.version, b.version) ? -1 : 1));
+  return valid[0];
 }
 
 export function hasNewerRelease(info: ReleaseInfo): boolean {

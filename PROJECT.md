@@ -156,7 +156,7 @@ vibecoding 过程中，灵感来得很随机（走路、洗澡、临睡前），
 
 - **每次发版版本号必须递增**：修复/小调整 → 补丁位（0.3.x），新功能 → 次版本位（0.x.0），破坏性变更 → 主版本位
 - **更新机制（0.4.0 起，标准安卓流程）**：App 内检查更新 → 拉取仓库根目录 `release.json`（经 jsDelivr 镜像，国内手机可达）→ 有新版本则应用内下载 APK → 系统安装器弹窗，用户确认后安装。不做 OTA 静默自更新
-- **每次出 APK 后必须同步更新 `release.json`**（version / apkUrl / notes）并推送仓库
+- **每次出 APK 后必须同步更新 `release.json`**（version / apkUrl / notes）并推送仓库，然后调 `https://purge.jsdelivr.net/gh/rexthelinebarrel/idea-bucket@master/release.json` 刷新 CDN 缓存（节点刷新有延迟属正常，App 端已做多镜像取最大版本容错）
 - 版本号唯一权威来源：`src/version.ts`（不读构建期嵌入的静态值）
 - 出包命令：`npx eas build --platform android --profile preview`（EAS 项目 owner：nachdenken）
 - （历史教训：曾用 EAS Update OTA + fingerprint runtime，因"版本号参与指纹计算"导致版本递增与 OTA 匹配存在结构性冲突，且用户要求系统安装确认流程，已弃用）
