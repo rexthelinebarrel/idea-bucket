@@ -19,6 +19,7 @@ export function IdeaCard({ idea, onPress }: { idea: Idea; onPress: () => void })
         <StatusBadge status={idea.status} />
         <Text style={styles.time}>{fmtDateTime(idea.createdAt)}</Text>
         {(idea.connCount ?? 0) > 0 && <Text style={styles.conn}>🔗 {idea.connCount}</Text>}
+        {(idea.candCount ?? 0) > 0 && <Text style={styles.cand}>✨ {idea.candCount}</Text>}
       </View>
       <Text style={styles.title} numberOfLines={1}>
         {idea.title}
@@ -52,6 +53,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 12,
     marginLeft: 'auto',
+  },
+  cand: {
+    color: colors.accent,
+    fontSize: 12,
   },
   title: {
     color: colors.text,

@@ -141,3 +141,49 @@ export async function chatAboutIdea(
     .join('\n');
   return chatCompletions(settings, [{ role: 'system', content: system }, ...history.slice(-12)]);
 }
+
+// ---- AI 自动连接第 2 层：终审候选对（反迎合设计） ----
+
+export interface ConnectionVerdict {
+  relation: 'merge' | 'evolve' | 'collide' | 'none';
+  reason: string;
+}
+
+const VALID_RELATIONS = ['merge', 'evolve', 'collide', 'none'] as const;
+
+/** 判定两条灵感的关系。铁律：默认 none，必须有原文证据，宁漏勿错。 */
+export async function judgeConnection(
+  a: { title: string; transcript: string },
+  b: { title: string; transcript: string },
+  settings: AISettings,
+): Promise<ConnectionVerdict> {
+  const raw = await chatCompletions(
+    settings,
+    [
+      {
+        role: 'system',
+        content:
+          '你是灵感库的连接判定器。判断两条灵感的关系，只能从四种中选一种：' +
+          'merge（本质是同一件事，建议合并）、evolve（同一灵感的迭代延续，新的演进旧的）、' +
+          'collide（不同方向但组合可能产生新东西）、none（没有实质关联）。\n' +
+          '铁律：默认答案是 none——只有证据明确时才选其他三种，且必须在 reason 里引用原文作为证据。' +
+          '宁可漏判，不可误判。不要因为想给出答案而硬找关联。\n' +
+          '只输出 JSON：{"relation":"none|merge|evolve|collide","reason":"一句话理由，含原文证据"}',
+      },
+      {
+        role: 'user',
+        content: `灵感A标题：${a.title}\n灵感A原文：${a.transcript}\n\n灵感B标题：${b.title}\n灵感B原文：${b.transcript}`,
+      },
+    ],
+    300,
+  );
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    const relation = VALID_RELATIONS.find((r) => r === parsed.relation) ?? 'none';
+    return { relation, reason: String(parsed.reason ?? '').slice(0, 200) };
+  } catch {
+    // 模型没按约定输出时按 none 处理（宁漏勿错）
+    return { relation: 'none', reason: '' };
+  }
+}

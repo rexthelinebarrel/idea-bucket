@@ -21,6 +21,7 @@ function recommendScore(idea: Idea): number {
   let s = 0;
   if (idea.aiAnalysis) s += 4;
   s += (idea.connCount ?? 0) * 2;
+  s += (idea.candCount ?? 0) * 3; // 有待确认 AI 建议的优先曝光
   if (Date.now() - idea.updatedAt < 3 * 24 * 3600_000) s += 1;
   return s;
 }

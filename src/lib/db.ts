@@ -11,11 +11,15 @@ export interface Idea {
   transcribeState: 'pending' | 'ok' | 'failed';
   /** JSON 字符串（IdeaAnalysis），空串 = 未分析 */
   aiAnalysis: string;
+  /** 本地算法提取的关键词（AI 自动连接的第 0 层信号），JSON 数组字符串解析而来 */
+  keywords: string[];
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
   /** 仅 listIdeas 带出 */
   connCount?: number;
+  /** 仅 listIdeas 带出：待确认的 AI 建议关联数 */
+  candCount?: number;
 }
 
 export interface ChatMessage {
@@ -70,7 +74,25 @@ db.execSync(`
     message TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs(ts);
+  CREATE TABLE IF NOT EXISTS connection_candidates (
+    a TEXT NOT NULL,
+    b TEXT NOT NULL,
+    score REAL NOT NULL,
+    verdict TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (a, b)
+  );
 `);
+
+// 轻量迁移：老库补 keywords 列（AI 自动连接用）
+{
+  const cols = db.getAllSync<{ name: string }>('PRAGMA table_info(ideas)');
+  if (!cols.some((c) => c.name === 'keywords')) {
+    db.execSync("ALTER TABLE ideas ADD COLUMN keywords TEXT NOT NULL DEFAULT ''");
+  }
+}
 
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -84,13 +106,21 @@ interface IdeaRow {
   status: string;
   transcribe_state: string;
   ai_analysis: string;
+  keywords: string;
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
   conn_count?: number;
+  cand_count?: number;
 }
 
 function rowToIdea(r: IdeaRow): Idea {
+  let keywords: string[] = [];
+  try {
+    keywords = r.keywords ? (JSON.parse(r.keywords) as string[]) : [];
+  } catch {
+    keywords = [];
+  }
   return {
     id: r.id,
     title: r.title,
@@ -99,10 +129,12 @@ function rowToIdea(r: IdeaRow): Idea {
     status: r.status as IdeaStatus,
     transcribeState: r.transcribe_state as Idea['transcribeState'],
     aiAnalysis: r.ai_analysis,
+    keywords,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at,
     connCount: r.conn_count,
+    candCount: r.cand_count,
   };
 }
 
@@ -150,10 +182,11 @@ export function getIdea(id: string): Idea | null {
   return row ? rowToIdea(row) : null;
 }
 
-/** 未删除的全部灵感（带连接数），按创建时间倒序 */
+/** 未删除的全部灵感（带连接数与待确认建议数），按创建时间倒序 */
 export function listIdeas(): Idea[] {
   const rows = db.getAllSync<IdeaRow>(
-    `SELECT i.*, (SELECT COUNT(*) FROM connections c WHERE c.a = i.id OR c.b = i.id) AS conn_count
+    `SELECT i.*, (SELECT COUNT(*) FROM connections c WHERE c.a = i.id OR c.b = i.id) AS conn_count,
+     (SELECT COUNT(*) FROM connection_candidates cc WHERE (cc.a = i.id OR cc.b = i.id) AND cc.status = 'pending') AS cand_count
      FROM ideas i WHERE i.deleted_at IS NULL ORDER BY i.created_at DESC`,
   );
   return rows.map(rowToIdea);
@@ -218,6 +251,130 @@ export function listConnectedIdeas(id: string): Idea[] {
     [id, id, id],
   );
   return rows.map(rowToIdea);
+}
+
+// ---- 关键词（AI 自动连接第 0 层）----
+
+export function updateIdeaKeywords(id: string, keywords: string[]): void {
+  db.runSync('UPDATE ideas SET keywords = ?, updated_at = ? WHERE id = ?', [
+    JSON.stringify(keywords),
+    Date.now(),
+    id,
+  ]);
+}
+
+/** 缺关键词但有转写文本的灵感（回填用） */
+export function listIdeasMissingKeywords(): { id: string; transcript: string }[] {
+  return db.getAllSync<{ id: string; transcript: string }>(
+    "SELECT id, transcript FROM ideas WHERE keywords = '' AND transcript != '' AND deleted_at IS NULL",
+  );
+}
+
+// ---- AI 建议连接候选（第 0 层产出，第 2 层判定，用户确认）----
+
+export type CandidateVerdict = 'merge' | 'evolve' | 'collide' | 'none' | '';
+
+export interface Candidate {
+  a: string;
+  b: string;
+  otherId: string;
+  otherTitle: string;
+  score: number;
+  verdict: CandidateVerdict;
+  reason: string;
+  status: 'pending' | 'confirmed' | 'dismissed';
+  createdAt: number;
+}
+
+interface CandidateRow {
+  a: string;
+  b: string;
+  score: number;
+  verdict: string;
+  reason: string;
+  status: string;
+  created_at: number;
+}
+
+function normPair(x: string, y: string): [string, string] {
+  return x < y ? [x, y] : [y, x];
+}
+
+export function addCandidate(x: string, y: string, score: number): void {
+  const [a, b] = normPair(x, y);
+  db.runSync(
+    `INSERT INTO connection_candidates (a, b, score, created_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(a, b) DO UPDATE SET score = excluded.score`,
+    [a, b, score, Date.now()],
+  );
+}
+
+/** 某灵感的待处理候选（带对方标题），按重合度降序 */
+export function listCandidatesFor(id: string): Candidate[] {
+  const rows = db.getAllSync<CandidateRow & { other_id: string; other_title: string }>(
+    `SELECT cc.*, o.id AS other_id, o.title AS other_title FROM connection_candidates cc
+     JOIN ideas o ON o.id = CASE WHEN cc.a = ? THEN cc.b ELSE cc.a END
+     WHERE (cc.a = ? OR cc.b = ?) AND cc.status = 'pending' AND o.deleted_at IS NULL
+     ORDER BY cc.score DESC`,
+    [id, id, id],
+  );
+  return rows.map((r) => ({
+    a: r.a,
+    b: r.b,
+    otherId: r.other_id,
+    otherTitle: r.other_title,
+    score: r.score,
+    verdict: r.verdict as CandidateVerdict,
+    reason: r.reason,
+    status: r.status as Candidate['status'],
+    createdAt: r.created_at,
+  }));
+}
+
+/** 未判定的候选（终审队列），可选只取某灵感相关 */
+export function listUnverdictedCandidates(limit: number, forIdeaId?: string): { a: string; b: string }[] {
+  if (forIdeaId) {
+    return db.getAllSync<{ a: string; b: string }>(
+      `SELECT a, b FROM connection_candidates WHERE verdict = '' AND status = 'pending'
+       AND (a = ? OR b = ?) ORDER BY score DESC LIMIT ?`,
+      [forIdeaId, forIdeaId, limit],
+    );
+  }
+  return db.getAllSync<{ a: string; b: string }>(
+    `SELECT a, b FROM connection_candidates WHERE verdict = '' AND status = 'pending'
+     ORDER BY score DESC LIMIT ?`,
+    [limit],
+  );
+}
+
+/** 写入终审结果；verdict=none 直接转为 dismissed，不再打扰用户 */
+export function setCandidateVerdict(
+  x: string,
+  y: string,
+  verdict: Exclude<CandidateVerdict, ''>,
+  reason: string,
+): void {
+  const [a, b] = normPair(x, y);
+  const status = verdict === 'none' ? 'dismissed' : 'pending';
+  db.runSync('UPDATE connection_candidates SET verdict = ?, reason = ?, status = ? WHERE a = ? AND b = ?', [
+    verdict,
+    reason,
+    status,
+    a,
+    b,
+  ]);
+}
+
+/** 用户确认：建立正式连接并把候选标记为已确认 */
+export function confirmCandidate(x: string, y: string): void {
+  addConnection(x, y);
+  const [a, b] = normPair(x, y);
+  db.runSync("UPDATE connection_candidates SET status = 'confirmed' WHERE a = ? AND b = ?", [a, b]);
+}
+
+export function dismissCandidate(x: string, y: string): void {
+  const [a, b] = normPair(x, y);
+  db.runSync("UPDATE connection_candidates SET status = 'dismissed' WHERE a = ? AND b = ?", [a, b]);
 }
 
 // ---- 讨论消息 ----

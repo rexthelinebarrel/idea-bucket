@@ -24,13 +24,23 @@ import {
   removeConnection,
   addMessage,
   listMessages,
+  listCandidatesFor,
+  confirmCandidate,
+  dismissCandidate,
   type Idea,
   type ChatMessage,
+  type Candidate,
 } from '@/lib/db';
 import { StatusBadge } from '@/components/status-badge';
 import { fmtDateTime } from '@/lib/format';
 import { processIdea } from '@/lib/pipeline';
 import { getAISettings, analyzeIdea, chatAboutIdea, type IdeaAnalysis } from '@/lib/ai';
+
+const VERDICT_LABEL: Record<string, string> = {
+  merge: '🧲 合并',
+  evolve: '🧬 演化',
+  collide: '🔀 碰撞',
+};
 
 export default function IdeaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,6 +48,7 @@ export default function IdeaDetailScreen() {
   const [connected, setConnected] = useState<Idea[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [analysis, setAnalysis] = useState<IdeaAnalysis | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [busy, setBusy] = useState<'analyze' | 'chat' | 'retry' | null>(null);
   const [draft, setDraft] = useState('');
 
@@ -51,6 +62,7 @@ export default function IdeaDetailScreen() {
     if (it) {
       setConnected(listConnectedIdeas(id));
       setMessages(listMessages(id));
+      setCandidates(listCandidatesFor(id));
       if (it.aiAnalysis) {
         try {
           setAnalysis(JSON.parse(it.aiAnalysis));
@@ -147,6 +159,22 @@ export default function IdeaDetailScreen() {
         },
       },
     ]);
+  }
+
+  // 确认 AI 建议：建立正式连接；双方若还是 🌱 原始，按状态机自动流转为 🔗 已连接
+  function confirmCandidateUI(c: Candidate) {
+    if (!idea) return;
+    confirmCandidate(idea.id, c.otherId);
+    if (idea.status === 'raw') updateIdea(idea.id, { status: 'connected' });
+    const other = getIdea(c.otherId);
+    if (other?.status === 'raw') updateIdea(other.id, { status: 'connected' });
+    load();
+  }
+
+  function dismissCandidateUI(c: Candidate) {
+    if (!idea) return;
+    dismissCandidate(idea.id, c.otherId);
+    setCandidates(listCandidatesFor(idea.id));
   }
 
   if (!idea) {
@@ -288,6 +316,35 @@ export default function IdeaDetailScreen() {
           </View>
         </View>
 
+        {/* AI 建议关联（分层连接：本地关键词候选 → LLM 终审 → 用户确认） */}
+        {candidates.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>✨ AI 建议关联</Text>
+            {candidates.map((c) => (
+              <View key={c.otherId} style={styles.candRow}>
+                <View style={styles.candMain}>
+                  <Text style={styles.connTitle} numberOfLines={1}>
+                    {c.otherTitle}
+                  </Text>
+                  {c.verdict ? (
+                    <Text style={styles.candReason}>
+                      {VERDICT_LABEL[c.verdict] ?? ''} · {c.reason || '建议建立连接'}
+                    </Text>
+                  ) : (
+                    <Text style={styles.candPending}>待 AI 判定（配置 AI 服务后自动判定）</Text>
+                  )}
+                </View>
+                <Pressable style={styles.candConfirmBtn} onPress={() => confirmCandidateUI(c)}>
+                  <Text style={styles.candConfirmText}>连接</Text>
+                </Pressable>
+                <Pressable onPress={() => dismissCandidateUI(c)}>
+                  <Text style={styles.connRemove}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* 关联灵感 */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>关联灵感</Text>
@@ -418,6 +475,23 @@ const styles = StyleSheet.create({
   },
   connTitle: { flex: 1, color: colors.text, fontSize: 14 },
   connRemove: { color: colors.danger, fontSize: 16, padding: 4 },
+  candRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  candMain: { flex: 1, gap: 2 },
+  candReason: { color: colors.accent, fontSize: 12, lineHeight: 17 },
+  candPending: { color: colors.textDim, fontSize: 12 },
+  candConfirmBtn: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  candConfirmText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   deleteButton: {
     alignItems: 'center',
     paddingVertical: 12,

@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 
 import { colors } from '@/theme';
 import { logEvent } from '@/lib/db';
+import { backfillKeywordsAndDetect } from '@/lib/pipeline';
 
 // ErrorUtils 没有 react-native 具名导出，RN 运行时只挂在 global 上；
 // 整条诊断逻辑包在 try/catch 里——诊断绝不能让 App 起不来。
@@ -42,6 +43,8 @@ export default function RootLayout() {
         `冷启动 v${Constants.expoConfig?.version ?? '?'} runtime=${Updates.runtimeVersion ?? '?'}`,
       );
       installCrashLogger();
+      // 老灵感关键词回填 + 候选检测 + 终审批次（后台静默跑，失败不影响启动）
+      backfillKeywordsAndDetect().catch(() => {});
     } catch {
       // 诊断绝不能让 App 起不来
     }
