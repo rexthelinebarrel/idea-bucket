@@ -317,6 +317,9 @@ export default function HomeScreen() {
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onTouchMove={handleTouchMove}
+            // 关键：扩大按压保持区域，手指大幅滑动不提前触发 onPressOut，
+            // 否则上滑到一半就会被误判为松手（取消/提交全乱）
+            pressRetentionOffset={{ top: 1000, bottom: 500, left: 500, right: 500 }}
             style={({ pressed }) => [
               styles.micButton,
               pressed && !recording && styles.micButtonPressed,
