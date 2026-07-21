@@ -1,6 +1,6 @@
 {
-  "version": "0.6.1",
-  "apkUrl": "https://expo.dev/artifacts/eas/ZWDhL8gJj8z9tuCju1aJMVbiVQsTFJjnzGPFncIgzlA.apk",
-  "notes": "修复版本发现：多镜像并发取最大版本，CDN 单节点缓存旧数据不再影响检查更新。",
+  "version": "0.6.2",
+  "apkUrl": "https://expo.dev/artifacts/eas/LbSyV0LeJRTHhA2rpISYNgOWx6TYtkJwuRU9TVYeGDY.apk",
+  "notes": "修复 APK 下载超时：可续传下载 + 进度显示 + 自动重试，失败可改用浏览器下载。",
   "publishedAt": "2026-07-21"
 }
