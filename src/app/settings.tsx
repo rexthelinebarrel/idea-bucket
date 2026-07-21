@@ -17,11 +17,10 @@ import { router, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { File, Paths } from 'expo-file-system';
 import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
 import { colors } from '@/theme';
-import { listDeletedIdeas, getSetting, setSetting, listLogs } from '@/lib/db';
+import { listDeletedIdeas, getSetting, setSetting, listLogs, logEvent } from '@/lib/db';
 import { getAISettings, saveAISettings, type AISettings } from '@/lib/ai';
 import {
   OFFLINE_MODELS,
@@ -55,6 +54,7 @@ export default function SettingsScreen() {
   const [updateState, setUpdateState] = useState('');
   const [release, setRelease] = useState<ReleaseInfo | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [apkProgress, setApkProgress] = useState<number | null>(null);
   const [services, setServices] = useState<string[]>([]);
   const [diag, setDiag] = useState<[string, string][]>([]);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -138,14 +138,37 @@ export default function SettingsScreen() {
   async function downloadAndInstall() {
     if (!release || downloading) return;
     setDownloading(true);
-    setUpdateState('下载中…（包较大，请保持前台）');
+    setApkProgress(0);
+    setUpdateState('下载中…（包较大，慢网需几分钟）');
+    const destUri = `${FileSystemLegacy.cacheDirectory}idea-bucket-${release.version}.apk`;
     try {
-      const dest = new File(Paths.cache, `idea-bucket-${release.version}.apk`);
-      if (dest.exists) dest.delete();
-      const apk = await File.downloadFileAsync(release.apkUrl, dest);
-      if ((apk.size ?? 0) === 0) throw new Error('下载内容为空');
+      let resultUri: string | null = null;
+      // 慢网容错：可续传下载 + 失败自动重试一次
+      for (let attempt = 1; attempt <= 2 && !resultUri; attempt++) {
+        try {
+          const task = FileSystemLegacy.createDownloadResumable(
+            release.apkUrl,
+            destUri,
+            {},
+            (p) => {
+              if (p.totalBytesExpectedToWrite > 0) {
+                setApkProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+              }
+            },
+          );
+          const result = await task.downloadAsync();
+          if (result?.uri) resultUri = result.uri;
+        } catch (e) {
+          logEvent(
+            'update',
+            `APK 下载第 ${attempt} 次失败: ${e instanceof Error ? e.message : String(e)}`,
+            'warn',
+          );
+          if (attempt === 2) throw e;
+        }
+      }
       setUpdateState('下载完成，调起安装…');
-      const contentUri = await FileSystemLegacy.getContentUriAsync(apk.uri);
+      const contentUri = await FileSystemLegacy.getContentUriAsync(resultUri!);
       await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
         data: contentUri,
         type: 'application/vnd.android.package-archive',
@@ -154,10 +177,22 @@ export default function SettingsScreen() {
       });
       setUpdateState('请在系统弹窗中确认安装');
     } catch (e) {
-      setUpdateState('下载/安装失败');
-      Alert.alert('更新失败', e instanceof Error ? e.message : '网络异常，请稍后重试');
+      setUpdateState('下载失败');
+      Alert.alert(
+        '下载失败',
+        '应用内下载被网络中断（安装包较大）。可重试，或改用浏览器下载——系统下载管理器支持断点续传，慢网更稳。',
+        [
+          { text: '重试', onPress: () => downloadAndInstall() },
+          {
+            text: '用浏览器下载',
+            onPress: () => Linking.openURL(release.apkUrl).catch(() => {}),
+          },
+          { text: '取消', style: 'cancel' },
+        ],
+      );
     } finally {
       setDownloading(false);
+      setApkProgress(null);
     }
   }
 
@@ -389,7 +424,11 @@ export default function SettingsScreen() {
             disabled={downloading}
           >
             <Text style={styles.saveButtonText}>
-              {downloading ? '下载中…' : '下载并安装'}
+              {downloading
+                ? apkProgress != null
+                  ? `下载中 ${Math.round(apkProgress * 100)}%`
+                  : '下载中…'
+                : '下载并安装'}
             </Text>
           </Pressable>
         </View>
