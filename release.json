@@ -1,6 +1,6 @@
 {
-  "version": "0.5.0",
-  "apkUrl": "https://expo.dev/artifacts/eas/6-hmQYRkvQpkeDKLllmc1MVBP584UQEJrUdxRe9RfBw.apk",
-  "notes": "AI 自动连接（分层方案）：入桶自动提取关键词发现候选，LLM 终审判定合并/演化/碰撞，详情页确认后建立连接并自动流转状态。",
+  "version": "0.6.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/yXIuv2GSRa5oN-HqAYWHkbkzwbQqUvg90N72heA8P1k.apk",
+  "notes": "新版本主动推送：打开 App 自动检查，发现新版本弹系统通知，点击直达更新；版本清单纯量多镜像容灾。",
   "publishedAt": "2026-07-20"
 }
