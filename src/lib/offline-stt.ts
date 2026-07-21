@@ -1,7 +1,16 @@
 // 离线 STT：sherpa-onnx 本地引擎（react-native-sherpa-onnx TurboModule）。
 // 模型按需下载到 document/models/，识别全程不联网、不依赖系统识别服务和任何 API Key。
 // 下载源优先 hf-mirror（国内可达），失败回退 huggingface。
-import { createStreamingSTT, type StreamingSttEngine } from 'react-native-sherpa-onnx/stt';
+//
+// 两类引擎（模型结构不同，识别路径不能混用，否则报维度错误）：
+// - streaming：流式 zipformer（encoder/decoder/joiner + tokens.txt），走 OnlineRecognizer 分块喂样本
+// - offline：Qwen3-ASR（conv_frontend/encoder/decoder + tokenizer/），走 OfflineRecognizer 一次解码
+import {
+  createSTT,
+  createStreamingSTT,
+  type SttEngine,
+  type StreamingSttEngine,
+} from 'react-native-sherpa-onnx/stt';
 import { decodeAudioFileToFloatSamples } from 'react-native-sherpa-onnx/audio';
 import { File, Directory, Paths } from 'expo-file-system';
 
@@ -12,8 +21,10 @@ export interface OfflineModel {
   label: string;
   desc: string;
   repo: string;
+  /** name 可带子目录（如 tokenizer/vocab.json），bytes 仅用于进度显示 */
   files: { name: string; bytes: number }[];
   totalMB: number;
+  engine: 'streaming' | 'offline';
 }
 
 export const OFFLINE_MODELS: OfflineModel[] = [
@@ -29,6 +40,7 @@ export const OFFLINE_MODELS: OfflineModel[] = [
       { name: 'tokens.txt', bytes: 322 },
     ],
     totalMB: 22,
+    engine: 'streaming',
   },
   {
     id: 'zipformer-bilingual-188m',
@@ -42,6 +54,23 @@ export const OFFLINE_MODELS: OfflineModel[] = [
       { name: 'tokens.txt', bytes: 340 },
     ],
     totalMB: 188,
+    engine: 'streaming',
+  },
+  {
+    id: 'qwen3-asr-0.6b',
+    label: 'Qwen3 高精度版（940MB）',
+    desc: '阿里 Qwen3-ASR 0.6B：准确率最高，多语言、方言、中英文混合都强；体积大，务必 WiFi 下载，首次加载需十几秒',
+    repo: 'csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25',
+    files: [
+      { name: 'conv_frontend.onnx', bytes: 44148281 },
+      { name: 'encoder.int8.onnx', bytes: 182491662 },
+      { name: 'decoder.int8.onnx', bytes: 755914231 },
+      { name: 'tokenizer/vocab.json', bytes: 2776833 },
+      { name: 'tokenizer/merges.txt', bytes: 1671853 },
+      { name: 'tokenizer/tokenizer_config.json', bytes: 12487 },
+    ],
+    totalMB: 940,
+    engine: 'offline',
   },
 ];
 
@@ -64,6 +93,11 @@ function modelDir(id: string): Directory {
   return new Directory(Paths.document, 'models', id);
 }
 
+/** name 可能带子目录（tokenizer/vocab.json），拆开逐段拼接 */
+function modelFile(dir: Directory, name: string): File {
+  return new File(dir, ...name.split('/'));
+}
+
 function stripScheme(uri: string): string {
   return uri.replace(/^file:\/\//, '');
 }
@@ -75,7 +109,7 @@ export function getModelState(id: string): ModelState {
   const dir = modelDir(id);
   let existing = 0;
   for (const f of model.files) {
-    const file = new File(dir, f.name);
+    const file = modelFile(dir, f.name);
     if (file.exists && (file.size ?? 0) > 0) existing += 1;
   }
   if (existing === 0) return 'missing';
@@ -94,11 +128,16 @@ export async function downloadModel(
   const total = model.files.reduce((s, f) => s + f.bytes, 0);
   let done = 0;
   for (const f of model.files) {
-    const dest = new File(dir, f.name);
+    const dest = modelFile(dir, f.name);
     if (dest.exists && (dest.size ?? 0) > 0) {
       done += f.bytes;
       onProgress?.(done / total);
       continue;
+    }
+    // 子目录（tokenizer/）先建出来
+    if (f.name.includes('/')) {
+      const parent = new Directory(dir, f.name.split('/')[0]);
+      if (!parent.exists) parent.create({ intermediates: true, idempotent: true });
     }
     let ok = false;
     let lastErr: unknown = null;
@@ -106,7 +145,8 @@ export async function downloadModel(
       const url = `${mirror}/${model.repo}/resolve/main/${f.name}`;
       try {
         logEvent('stt', `下载 ${f.name}（${mirror}）`);
-        const tmp = new File(Paths.cache, `${f.name}.tmp`);
+        // 临时文件名不能含路径分隔符
+        const tmp = new File(Paths.cache, `${f.name.replace(/\//g, '_')}.tmp`);
         if (tmp.exists) tmp.delete();
         const result = await File.downloadFileAsync(url, tmp);
         if ((result.size ?? 0) === 0) throw new Error('空文件');
@@ -139,35 +179,71 @@ export function deleteModel(id: string): void {
   }
 }
 
-// —— 引擎单例：模型加载耗时几秒，加载一次常驻复用 ——
-// 注意：两个内置模型都是流式（streaming）zipformer，必须用 OnlineRecognizer 路径，
-// 不能用离线 transcribeFile（会报维度不匹配）。流程：解码 m4a → 分块喂样本 → 收尾解码。
-let engine: StreamingSttEngine | null = null;
+// —— 引擎单例：模型加载耗时几秒到十几秒，加载一次常驻复用；同时只驻留一个引擎 ——
+// 教训：流式模型不能用 OfflineRecognizer（报维度错），反之亦然，必须按 engine 字段分流。
+let streamingEngine: StreamingSttEngine | null = null;
+let offlineEngine: SttEngine | null = null;
 let engineModelId: string | null = null;
+
+async function destroyEngines(): Promise<void> {
+  if (streamingEngine) {
+    await streamingEngine.destroy().catch(() => {});
+    streamingEngine = null;
+  }
+  if (offlineEngine) {
+    await offlineEngine.destroy().catch(() => {});
+    offlineEngine = null;
+  }
+  engineModelId = null;
+}
+
+async function ensureEngine(model: OfflineModel): Promise<void> {
+  if (engineModelId === model.id && (streamingEngine || offlineEngine)) return;
+  await destroyEngines();
+  const path = stripScheme(modelDir(model.id).uri);
+  logEvent('stt', `加载离线模型 ${model.id}`);
+  if (model.engine === 'streaming') {
+    streamingEngine = await createStreamingSTT({
+      modelPath: { type: 'file', path },
+      modelType: 'auto',
+      numThreads: 2,
+    });
+  } else {
+    // Qwen3-ASR：maxTotalLen/maxNewTokens 默认值（512/128）只够十几秒短音频，
+    // 灵感录音动辄 1~2 分钟，放大上限防止长录音被截断
+    offlineEngine = await createSTT({
+      modelPath: { type: 'file', path },
+      modelType: 'qwen3_asr',
+      numThreads: 4,
+      modelOptions: { qwen3Asr: { maxTotalLen: 4096, maxNewTokens: 512 } },
+    });
+  }
+  engineModelId = model.id;
+}
 
 export async function transcribeOffline(audioUri: string): Promise<string> {
   const modelId = getActiveModelId();
   if (getModelState(modelId) !== 'ready') {
     throw new Error('离线模型未下载，请先到「设置」下载模型');
   }
-  if (!engine || engineModelId !== modelId) {
-    if (engine) {
-      await engine.destroy().catch(() => {});
-      engine = null;
-    }
-    const path = stripScheme(modelDir(modelId).uri);
-    logEvent('stt', `加载离线模型 ${modelId}`);
-    engine = await createStreamingSTT({
-      modelPath: { type: 'file', path },
-      modelType: 'auto',
-    });
-    engineModelId = modelId;
-  }
+  const model = getModel(modelId);
+  await ensureEngine(model);
+
   const t0 = Date.now();
   const { samples } = await decodeAudioFileToFloatSamples(stripScheme(audioUri), 16000);
-  const stream = await engine.createStream();
+
+  // Qwen3-ASR：一次整体解码
+  if (model.engine === 'offline') {
+    if (!offlineEngine) throw new Error('离线引擎未就绪');
+    const result = await offlineEngine.transcribeSamples(samples, 16000);
+    logEvent('stt', `离线识别完成（${Date.now() - t0}ms，qwen3）`);
+    return (result.text ?? '').trim();
+  }
+
+  // 流式 zipformer：分块喂入（每块约 1 秒），避免超大数组一次过桥
+  if (!streamingEngine) throw new Error('离线引擎未就绪');
+  const stream = await streamingEngine.createStream();
   try {
-    // 分块喂入（每块约 1 秒），避免超大数组一次过桥
     const CHUNK = 16000;
     for (let i = 0; i < samples.length; i += CHUNK) {
       await stream.acceptWaveform(samples.slice(i, i + CHUNK), 16000);

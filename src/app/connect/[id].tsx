@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
-import { colors } from '@/theme';
+import { colors, radius } from '@/theme';
 import { listIdeas, addConnection, type Idea } from '@/lib/db';
 import { StatusBadge } from '@/components/status-badge';
 import { fmtDateTime } from '@/lib/format';
@@ -67,24 +67,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16 },
   search: {
     backgroundColor: colors.card,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     color: colors.text,
     fontSize: 15,
     marginTop: 12,
   },
-  listContent: { paddingTop: 12, paddingBottom: 24, gap: 8 },
+  listContent: { paddingTop: 14, paddingBottom: 24, gap: 10 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 12,
-    gap: 8,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 14,
+    gap: 10,
   },
   rowMain: { flex: 1 },
   rowTitle: { color: colors.text, fontSize: 15 },
-  rowTime: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  rowTime: { color: colors.textDim, fontSize: 12, marginTop: 3 },
   empty: { color: colors.textDim, textAlign: 'center', marginTop: 60, fontSize: 15 },
 });

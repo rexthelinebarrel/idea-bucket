@@ -5,7 +5,15 @@
 // - 云端 API：录音先落盘即确认，转写走异步流水线（OpenAI 兼容接口）
 // 注意：系统识别与其他两种互斥，绝不同时占用麦克风（多数设备不允许多路采集）。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import {
   useAudioRecorder,
@@ -19,9 +27,9 @@ import {
 } from '@jamsch/expo-speech-recognition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors } from '@/theme';
+import { colors, radius } from '@/theme';
 import { countIdeas, createIdea, genId, setSetting, logEvent } from '@/lib/db';
-import { moveRecording } from '@/lib/files';
+import { moveRecording, deleteAudioFile } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
 import { getAISettings, type AISettings } from '@/lib/ai';
@@ -32,6 +40,10 @@ export default function HomeScreen() {
   const [count, setCount] = useState(0);
   const [recording, setRecording] = useState(false);
   const [toast, setToast] = useState('');
+  // 上滑取消：手指从按下位置上移超过阈值即进入"松手取消"状态
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const cancelArmedRef = useRef(false);
+  const pressStartYRef = useRef(0);
   const startAt = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
@@ -89,7 +101,14 @@ export default function HomeScreen() {
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }
 
-  async function handlePressIn() {
+  function armCancel(v: boolean) {
+    cancelArmedRef.current = v;
+    setCancelArmed(v);
+  }
+
+  async function handlePressIn(e: GestureResponderEvent) {
+    pressStartYRef.current = e.nativeEvent.pageY;
+    armCancel(false);
     const mode = getAISettings().transcribeMode;
     if (mode === 'offline' && getModelState(getActiveModelId()) !== 'ready') {
       Alert.alert('需要先下载离线模型', '离线识别首次使用前要下载模型（轻量版仅 22MB）。', [
@@ -103,9 +122,47 @@ export default function HomeScreen() {
     else await startRecorder();
   }
 
+  function handleTouchMove(e: GestureResponderEvent) {
+    if (!recording) return;
+    const dy = e.nativeEvent.pageY - pressStartYRef.current;
+    const armed = dy < -70;
+    if (armed !== cancelArmedRef.current) armCancel(armed);
+  }
+
   async function handlePressOut() {
-    if (modeRef.current === 'system') await stopSystemRecognition();
-    else await stopRecorder();
+    const cancelled = cancelArmedRef.current;
+    armCancel(false);
+    if (modeRef.current === 'system') {
+      if (cancelled) cancelSystemRecognition();
+      else await stopSystemRecognition();
+    } else {
+      if (cancelled) await cancelRecorder();
+      else await stopRecorder();
+    }
+  }
+
+  // ---- 上滑取消：两种模式共用收尾——停采集、弃产物、不入桶 ----
+
+  function cancelSystemRecognition() {
+    if (!recording) return;
+    setRecording(false);
+    ExpoSpeechRecognitionModule.abort();
+    logEvent('speech', '用户上滑取消录音');
+    showToast('已取消');
+  }
+
+  async function cancelRecorder() {
+    if (!recording) return;
+    setRecording(false);
+    try {
+      await recorder.stop();
+    } catch {
+      // 停止失败也继续清理
+    }
+    setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    if (recorder.uri) deleteAudioFile(recorder.uri);
+    logEvent('idea', '用户上滑取消录音');
+    showToast('已取消');
   }
 
   // ---- 系统识别模式（免配置，松手即出文字）----
@@ -241,19 +298,38 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 20 }]}>
-      <Text style={styles.logo}>灵感桶</Text>
-      <Text style={styles.slogan}>按住说话，松手即走</Text>
+    <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.brand}>
+        <Text style={styles.logo}>灵感桶</Text>
+        <Text style={styles.slogan}>按住说话，松手即走</Text>
+      </View>
 
       <View style={styles.middle}>
-        <Pressable
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          style={[styles.micButton, recording && styles.micButtonActive]}
-        >
-          <Text style={styles.micIcon}>🎤</Text>
-        </Pressable>
-        <Text style={styles.hint}>{recording ? '正在录音，松手结束' : ''}</Text>
+        <View style={styles.micWrap}>
+          <View
+            style={[
+              styles.micRing,
+              recording && !cancelArmed && styles.micRingActive,
+              cancelArmed && styles.micRingCancel,
+            ]}
+          />
+          <Pressable
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            onTouchMove={handleTouchMove}
+            style={({ pressed }) => [
+              styles.micButton,
+              pressed && !recording && styles.micButtonPressed,
+              recording && styles.micButtonActive,
+              cancelArmed && styles.micButtonCancel,
+            ]}
+          >
+            <Text style={styles.micIcon}>{cancelArmed ? '🗑' : '🎤'}</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.hint, cancelArmed && styles.hintCancel]}>
+          {recording ? (cancelArmed ? '松手取消' : '正在录音 · 上滑取消') : ''}
+        </Text>
         <Text style={styles.counter}>
           {count > 0 ? `桶里攒了 ${count} 个点子` : '桶还是空的，丢第一个进来'}
         </Text>
@@ -261,11 +337,11 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Pressable style={styles.footerButton} onPress={() => router.push('/list')}>
-          <Text style={styles.footerButtonText}>📋 灵感列表</Text>
+        <Pressable style={styles.footerPrimary} onPress={() => router.push('/list')}>
+          <Text style={styles.footerPrimaryText}>📋 灵感列表</Text>
         </Pressable>
-        <Pressable style={styles.footerButton} onPress={() => router.push('/settings')}>
-          <Text style={styles.footerButtonText}>⚙️ 设置</Text>
+        <Pressable style={styles.footerGhost} onPress={() => router.push('/settings')}>
+          <Text style={styles.footerGhostText}>⚙️ 设置</Text>
         </Pressable>
       </View>
     </View>
@@ -278,54 +354,97 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     paddingHorizontal: 24,
   },
+  brand: {
+    alignItems: 'center',
+  },
   logo: {
-    fontSize: 34,
-    fontWeight: '700',
+    fontSize: 38,
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: 8,
     textAlign: 'center',
+    marginLeft: 8, // 抵消末字 letterSpacing 造成的视觉偏移
   },
   slogan: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textDim,
+    letterSpacing: 3,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 12,
+    marginLeft: 3,
   },
   middle: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  micWrap: {
+    width: 224,
+    height: 224,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micRing: {
+    position: 'absolute',
+    width: 212,
+    height: 212,
+    borderRadius: 106,
+    borderWidth: 1,
+    borderColor: colors.accentSoft,
+  },
+  micRingActive: {
+    borderColor: colors.danger,
+    opacity: 0.55,
+  },
+  micRingCancel: {
+    borderColor: colors.danger,
+    opacity: 1,
+  },
   micButton: {
-    width: 170,
-    height: 170,
-    borderRadius: 85,
+    width: 168,
+    height: 168,
+    borderRadius: 84,
     backgroundColor: colors.card,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  micButtonPressed: {
+    transform: [{ scale: 0.97 }],
+  },
   micButtonActive: {
-    backgroundColor: '#3A2226',
+    backgroundColor: colors.dangerSoft,
     borderColor: colors.danger,
-    transform: [{ scale: 1.08 }],
+    transform: [{ scale: 1.05 }],
+  },
+  micButtonCancel: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
+    transform: [{ scale: 0.94 }],
   },
   micIcon: {
-    fontSize: 72,
+    fontSize: 68,
   },
   hint: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.accent,
-    marginTop: 22,
+    marginTop: 26,
     minHeight: 22,
+    letterSpacing: 1,
+  },
+  hintCancel: {
+    color: colors.danger,
+    fontWeight: '700',
   },
   counter: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textDim,
-    marginTop: 6,
+    marginTop: 8,
+    letterSpacing: 0.5,
   },
   toast: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.accent,
     marginTop: 14,
   },
@@ -333,15 +452,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  footerButton: {
+  footerPrimary: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 15,
+    borderRadius: radius.lg,
     backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     alignItems: 'center',
   },
-  footerButtonText: {
-    fontSize: 16,
+  footerPrimaryText: {
+    fontSize: 15,
     color: colors.text,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  footerGhost: {
+    paddingHorizontal: 22,
+    paddingVertical: 15,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerGhostText: {
+    fontSize: 15,
+    color: colors.textDim,
   },
 });

@@ -142,6 +142,40 @@ export async function chatAboutIdea(
   return chatCompletions(settings, [{ role: 'system', content: system }, ...history.slice(-12)]);
 }
 
+// ---- AI 关键词提取（第 0 层连接的原料，比本地词频算法更懂语义） ----
+
+/** AI 提取关键词：返回 5~8 个短词。失败抛错，由调用方回退本地算法。 */
+export async function extractKeywordsAI(
+  title: string,
+  transcript: string,
+  settings: AISettings,
+): Promise<string[]> {
+  const raw = await chatCompletions(
+    settings,
+    [
+      {
+        role: 'system',
+        content:
+          '你是关键词提取器。从用户的灵感文本中提取 5~8 个关键词，用于灵感之间的相似度匹配。' +
+          '规则：选能代表主题的名词或动名词，不要虚词和标点；每个词 2~6 个字；近义词只保留一个；' +
+          '只输出 JSON 数组本身，例如 ["摆摊","夜市","低成本创业"]。',
+      },
+      { role: 'user', content: `标题：${title}\n原文：${transcript}` },
+    ],
+    300,
+  );
+  const match = raw.match(/\[[\s\S]*\]/);
+  const parsed: unknown = JSON.parse(match ? match[0] : raw);
+  if (!Array.isArray(parsed)) throw new Error('关键词格式异常');
+  const words = [
+    ...new Set(
+      parsed.map((w) => String(w).trim()).filter((w) => w.length >= 2 && w.length <= 20),
+    ),
+  ];
+  if (words.length === 0) throw new Error('关键词为空');
+  return words.slice(0, 8);
+}
+
 // ---- AI 自动连接第 2 层：终审候选对（反迎合设计） ----
 
 export interface ConnectionVerdict {

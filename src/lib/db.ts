@@ -253,6 +253,25 @@ export function listConnectedIdeas(id: string): Idea[] {
   return rows.map(rowToIdea);
 }
 
+/** 全量已确认连接（图谱视图用），两端灵感都未删除 */
+export function listAllConnections(): { a: string; b: string }[] {
+  return db.getAllSync<{ a: string; b: string }>(
+    `SELECT c.a, c.b FROM connections c
+     JOIN ideas ia ON ia.id = c.a AND ia.deleted_at IS NULL
+     JOIN ideas ib ON ib.id = c.b AND ib.deleted_at IS NULL`,
+  );
+}
+
+/** 待确认的 AI 建议关联（图谱虚线用），两端灵感都未删除 */
+export function listActiveCandidates(): { a: string; b: string }[] {
+  return db.getAllSync<{ a: string; b: string }>(
+    `SELECT cc.a, cc.b FROM connection_candidates cc
+     JOIN ideas ia ON ia.id = cc.a AND ia.deleted_at IS NULL
+     JOIN ideas ib ON ib.id = cc.b AND ib.deleted_at IS NULL
+     WHERE cc.status = 'pending'`,
+  );
+}
+
 // ---- 关键词（AI 自动连接第 0 层）----
 
 export function updateIdeaKeywords(id: string, keywords: string[]): void {

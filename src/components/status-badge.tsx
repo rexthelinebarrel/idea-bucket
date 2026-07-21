@@ -13,9 +13,10 @@ const styles = StyleSheet.create({
   badge: {
     fontSize: 11,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     overflow: 'hidden',
+    opacity: 0.9,
   },
 });

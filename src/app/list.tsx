@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
-import { colors, STATUS, type IdeaStatus } from '@/theme';
+import { colors, radius, STATUS, type IdeaStatus } from '@/theme';
 import { listIdeas, type Idea } from '@/lib/db';
 import { IdeaCard } from '@/components/idea-card';
 
@@ -65,7 +65,7 @@ export default function ListScreen() {
     <View style={styles.container}>
       <TextInput
         style={styles.search}
-        placeholder="搜索标题或原文…"
+        placeholder="🔍 搜索标题或原文…"
         placeholderTextColor={colors.textDim}
         value={q}
         onChangeText={setQ}
@@ -81,6 +81,10 @@ export default function ListScreen() {
             <Text style={[styles.chipText, sort === s.key && styles.chipTextActive]}>{s.label}</Text>
           </Pressable>
         ))}
+        <View style={styles.sortSpacer} />
+        <Pressable style={styles.chip} onPress={() => router.push('/graph')}>
+          <Text style={styles.chipText}>🕸 图谱</Text>
+        </Pressable>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
@@ -128,9 +132,11 @@ const styles = StyleSheet.create({
   },
   search: {
     backgroundColor: colors.card,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     color: colors.text,
     fontSize: 15,
     marginTop: 12,
@@ -139,34 +145,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
+    alignItems: 'center',
   },
+  sortSpacer: { flex: 1 },
   filterRow: {
     flexDirection: 'row',
     marginTop: 10,
     flexGrow: 0,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 999,
     backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
   },
   chipText: {
     fontSize: 13,
     color: colors.textDim,
   },
   chipTextActive: {
-    color: '#1A1206',
+    color: colors.accent,
     fontWeight: '600',
   },
   listContent: {
-    paddingTop: 12,
+    paddingTop: 14,
     paddingBottom: 24,
-    gap: 10,
+    gap: 12,
   },
   empty: {
     color: colors.textDim,

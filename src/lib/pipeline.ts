@@ -13,7 +13,7 @@ import {
   setCandidateVerdict,
   dismissCandidate,
 } from './db';
-import { getAISettings, transcribeAudio, judgeConnection } from './ai';
+import { getAISettings, transcribeAudio, judgeConnection, extractKeywordsAI } from './ai';
 import { transcribeOffline } from './offline-stt';
 import { generateTitle, fallbackTitle, extractKeywords } from './title';
 
@@ -62,11 +62,26 @@ function jaccard(a: string[], b: string[]): number {
   return union === 0 ? 0 : inter / union;
 }
 
-/** 提取关键词入库，并对全桶做第 0 层匹配 + 触发终审 */
+/** 提取关键词入库，并对全桶做第 0 层匹配 + 触发终审。
+ *  关键词优先用第三方 API（语义更准），没配 key 或请求失败回退本地词频算法。 */
 export async function extractAndDetect(id: string): Promise<void> {
   const idea = getIdea(id);
   if (!idea?.transcript) return;
-  const keywords = extractKeywords(idea.transcript, 8);
+  const settings = getAISettings();
+  let keywords: string[] = [];
+  if (settings.apiKey) {
+    try {
+      keywords = await extractKeywordsAI(idea.title, idea.transcript, settings);
+      logEvent('connect', `AI 关键词 ${keywords.length} 个（${id.slice(-4)}）`);
+    } catch (e) {
+      logEvent(
+        'connect',
+        `AI 关键词失败回退本地算法: ${e instanceof Error ? e.message : String(e)}`,
+        'warn',
+      );
+    }
+  }
+  if (keywords.length === 0) keywords = extractKeywords(idea.transcript, 8);
   updateIdeaKeywords(id, keywords);
   if (keywords.length === 0) return;
 

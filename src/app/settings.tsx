@@ -19,7 +19,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { getSpeechRecognitionServices } from '@jamsch/expo-speech-recognition';
 
-import { colors } from '@/theme';
+import { colors, radius } from '@/theme';
 import { listDeletedIdeas, getSetting, setSetting, listLogs, logEvent } from '@/lib/db';
 import { getAISettings, saveAISettings, type AISettings } from '@/lib/ai';
 import {
@@ -338,7 +338,10 @@ export default function SettingsScreen() {
               </Pressable>
             );
           })}
-          <Text style={styles.note}>模型只下载一次，之后识别全程离线；首次加载模型需几秒钟。</Text>
+          <Text style={styles.note}>
+            模型只下载一次，之后识别全程离线。追求准确率选 Qwen3 高精度版（体积大，建议 WiFi
+            下载）；追求轻巧选轻量版。
+          </Text>
         </View>
       )}
 
@@ -476,42 +479,55 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 16, marginBottom: 6 },
-  note: { fontSize: 13, color: colors.textDim, lineHeight: 19, marginBottom: 8 },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textDim,
+    letterSpacing: 2,
+    marginTop: 22,
+    marginBottom: 8,
+  },
+  note: { fontSize: 13, color: colors.textDim, lineHeight: 20, marginBottom: 8 },
   field: { marginBottom: 12 },
   label: { fontSize: 13, color: colors.textDim, marginBottom: 6 },
   input: {
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     color: colors.text,
     fontSize: 15,
   },
   saveButton: {
     backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: radius.md,
+    paddingVertical: 13,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
   },
-  saveButtonText: { color: '#1A1206', fontWeight: '700', fontSize: 15 },
+  saveButtonText: { color: colors.onAccent, fontWeight: '700', fontSize: 15, letterSpacing: 1 },
   modeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   modeRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   modeChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 999,
     backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  modeChipActive: { backgroundColor: colors.accent },
+  modeChipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   modeChipText: { fontSize: 13, color: colors.textDim },
-  modeChipTextActive: { color: '#1A1206', fontWeight: '600' },
+  modeChipTextActive: { color: colors.accent, fontWeight: '600' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     padding: 14,
     marginBottom: 8,
   },
@@ -519,8 +535,10 @@ const styles = StyleSheet.create({
   rowArrow: { color: colors.textDim, fontSize: 18 },
   diagCard: {
     backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 14,
     marginBottom: 10,
     gap: 6,
   },
@@ -532,7 +550,7 @@ const styles = StyleSheet.create({
   shareButton: {
     borderWidth: 1,
     borderColor: colors.accent,
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
@@ -542,25 +560,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 14,
     marginBottom: 8,
     gap: 10,
-    borderWidth: 1,
-    borderColor: 'transparent',
   },
-  modelCardActive: { borderColor: colors.accent },
+  modelCardActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   modelMain: { flex: 1 },
   modelLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  modelDesc: { color: colors.textDim, fontSize: 12, marginTop: 2, lineHeight: 17 },
-  modelState: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  modelDesc: { color: colors.textDim, fontSize: 12, marginTop: 3, lineHeight: 17 },
+  modelState: { color: colors.textDim, fontSize: 12, marginTop: 3 },
   dlButton: {
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  dlButtonText: { color: '#1A1206', fontWeight: '600', fontSize: 13 },
+  dlButtonText: { color: colors.onAccent, fontWeight: '700', fontSize: 13 },
   dlProgress: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   releaseTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
 });

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '@/theme';
+import { colors, radius } from '@/theme';
 import type { Idea } from '@/lib/db';
 import { fmtDateTime } from '@/lib/format';
 import { StatusBadge } from './status-badge';
@@ -14,7 +14,10 @@ export function IdeaCard({ idea, onPress }: { idea: Idea; onPress: () => void })
         : idea.transcript.trim().slice(0, 60);
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={onPress}
+    >
       <View style={styles.row}>
         <StatusBadge status={idea.status} />
         <Text style={styles.time}>{fmtDateTime(idea.createdAt)}</Text>
@@ -36,9 +39,14 @@ export function IdeaCard({ idea, onPress }: { idea: Idea; onPress: () => void })
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    gap: 6,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 16,
+    gap: 8,
+  },
+  cardPressed: {
+    opacity: 0.75,
   },
   row: {
     flexDirection: 'row',
@@ -62,10 +70,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   excerpt: {
     color: colors.textDim,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
   },
 });
