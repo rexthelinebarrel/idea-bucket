@@ -13,6 +13,7 @@ import {
 } from 'react-native-sherpa-onnx/stt';
 import { decodeAudioFileToFloatSamples } from 'react-native-sherpa-onnx/audio';
 import { File, Directory, Paths } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 
 import { getSetting, setSetting, logEvent } from './db';
 
@@ -116,7 +117,34 @@ export function getModelState(id: string): ModelState {
   return existing === model.files.length ? 'ready' : 'partial';
 }
 
-/** 下载模型全部文件（逐文件尝试多个镜像源）。onProgress(0~1) */
+/** 单文件下载：可续传 + 断点续传一次。
+ *  940MB 的 Qwen3 模型在慢网下必超时（File.downloadFileAsync 新 API 无续传），
+ *  必须用 legacy 的 createDownloadResumable（APK 下载已验证过这条路）。 */
+async function downloadOne(
+  url: string,
+  tmpUri: string,
+  onBytes: (written: number) => void,
+): Promise<string> {
+  const task = FileSystemLegacy.createDownloadResumable(url, tmpUri, {}, (p) =>
+    onBytes(p.totalBytesWritten),
+  );
+  try {
+    const res = await task.downloadAsync();
+    if (res && res.status === 200) return res.uri;
+    throw new Error(`HTTP ${res?.status ?? '异常'}`);
+  } catch (e) {
+    // 网络中断时已下载的字节不浪费，断点续传再试一次
+    try {
+      const res = await task.resumeAsync();
+      if (res && res.status === 200) return res.uri;
+    } catch {
+      // 落到外层换镜像
+    }
+    throw e;
+  }
+}
+
+/** 下载模型全部文件（逐文件尝试多个镜像源）。onProgress(0~1)，字节级进度 */
 export async function downloadModel(
   id: string,
   onProgress?: (progress: number) => void,
@@ -146,12 +174,16 @@ export async function downloadModel(
       try {
         logEvent('stt', `下载 ${f.name}（${mirror}）`);
         // 临时文件名不能含路径分隔符
-        const tmp = new File(Paths.cache, `${f.name.replace(/\//g, '_')}.tmp`);
-        if (tmp.exists) tmp.delete();
-        const result = await File.downloadFileAsync(url, tmp);
-        if ((result.size ?? 0) === 0) throw new Error('空文件');
+        const tmpUri = `${FileSystemLegacy.cacheDirectory}${f.name.replace(/\//g, '_')}.tmp`;
+        const tmpFile = new File(tmpUri);
+        if (tmpFile.exists) tmpFile.delete();
+        const uri = await downloadOne(url, tmpUri, (written) => {
+          onProgress?.(Math.min((done + written) / total, 1));
+        });
+        const downloaded = new File(uri);
+        if ((downloaded.size ?? 0) === 0) throw new Error('空文件');
         if (dest.exists) dest.delete();
-        result.move(dest);
+        downloaded.move(dest);
         ok = true;
         break;
       } catch (e) {
