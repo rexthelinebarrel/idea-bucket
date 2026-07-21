@@ -1,6 +1,6 @@
 {
-  "version": "0.6.2",
-  "apkUrl": "https://expo.dev/artifacts/eas/LbSyV0LeJRTHhA2rpISYNgOWx6TYtkJwuRU9TVYeGDY.apk",
-  "notes": "修复 APK 下载超时：可续传下载 + 进度显示 + 自动重试，失败可改用浏览器下载。",
-  "publishedAt": "2026-07-21"
+  "version": "0.7.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/GCyz9xCoXIlxCjdDsAouXWSI3ftbm8qLa5m-G_m5kh8.apk",
+  "notes": "①录音按住上滑可取消（松手丢弃）；②离线模型新增 Qwen3 高精度版（940MB，设置页下载，识别准确率大幅提升，建议 WiFi 下载）；③关键词改用 AI 提取（配置 API Key 后生效），新增灵感图谱（列表页右上角 🕸 入口）；④全端界面改版。",
+  "publishedAt": "2026-07-22"
 }
