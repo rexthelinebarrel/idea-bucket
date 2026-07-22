@@ -172,13 +172,14 @@ vibecoding 过程中，灵感来得很随机（走路、洗澡、临睡前），
 ## 技术选型（v1 已定）
 
 - 框架：Expo / React Native + TypeScript（SDK 57，expo-router，src/ 目录）
+- **信息架构（0.8.0 起）**：底部 Tab 导航四页——投入（录音）/ 灵感（列表）/ 图谱 / 设置；详情、建立关联、回收站为栈页
 - 录音/回放：expo-audio（按住录音、上滑取消）
 - 存储：expo-sqlite（灵感/连接/候选/讨论消息/设置/日志六张表）+ 本地文件系统存音频（document/audio/）
 - 语音转写（三模式，设置页切换）：
   - **离线引擎（默认）**：react-native-sherpa-onnx 本地识别，不联网、无需 Key。模型三选一：流式 zipformer 轻量版 22MB / 双语版 188MB（OnlineRecognizer 分块流式解码）；**Qwen3-ASR 0.6B int8 高精度版 940MB**（0.7.0 起，OfflineRecognizer 整体解码，准确率最高，经 hf-mirror 下载）
   - **系统识别**：@jamsch/expo-speech-recognition，调用手机自带识别服务
   - **云端 API**：OpenAI 兼容转写接口（Whisper 兼容），baseURL / key / 模型名可配
-- AI 讨论/展开/关键词/终审：OpenAI 兼容 chat completions，同一组配置，全部供应商解耦
+- AI 讨论/展开/关键词/终审：OpenAI 兼容 chat completions，同一组配置，全部供应商解耦；设置页有常用服务商预设（硅基流动/DeepSeek/Groq/OpenAI，0.8.0 起）
 - 图谱视图（0.7.0 起）：react-native-svg + 本地力导向布局（Fruchterman-Reingold），实线=已确认连接、虚线=AI 建议
 - 云同步：v2 再定
 

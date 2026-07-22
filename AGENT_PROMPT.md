@@ -250,23 +250,25 @@ v1 专注移动端。v2 才上电脑端。
 
 ---
 
-## 当前状态快照（2026-07-21 v0.7.0，新会话来此时先读这段，可省大量上下文）
+## 当前状态快照（2026-07-22 v0.8.0，新会话来此时先读这段，可省大量上下文）
 
 - 仓库：https://github.com/rexthelinebarrel/idea-bucket （master，MIT，公开）
 - 技术栈：Expo SDK 57 / RN 0.86 / TypeScript，expo-router（src/ 目录），expo-sqlite + expo-file-system，expo-audio，react-native-svg（图谱）
+- **信息架构（0.8.0 大改）**：底部 Tab 导航 `src/app/(tabs)/`——投入 index / 灵感 list / 图谱 graph / 设置 settings；idea/[id]、connect/[id]、recycle-bin 为栈页。首页只留录音
 - **转写三模式**（设置页可切）：
-  - 离线引擎（默认）：react-native-sherpa-onnx。模型三选一（src/lib/offline-stt.ts）：流式 zipformer 轻量 22MB / 双语 188MB（OnlineRecognizer 分块流式解码）；**Qwen3-ASR 0.6B int8 高精度 940MB（0.7.0 起，OfflineRecognizer 整体解码，maxTotalLen 4096 / maxNewTokens 512 / numThreads 4）**。两类引擎路径不能混用（流式模型进离线识别器报维度错），按 OfflineModel.engine 字段分流。模型经 hf-mirror 下载
+  - 离线引擎（默认）：react-native-sherpa-onnx。模型三选一（src/lib/offline-stt.ts）：流式 zipformer 轻量 22MB / 双语 188MB（OnlineRecognizer 分块流式解码）；**Qwen3-ASR 0.6B int8 高精度 940MB（OfflineRecognizer 整体解码，maxTotalLen 4096 / maxNewTokens 512 / numThreads 4）**。两类引擎路径不能混用（流式模型进离线识别器报维度错），按 OfflineModel.engine 字段分流。模型经 hf-mirror 下载（createDownloadResumable 可续传）
   - 系统识别：@jamsch/expo-speech-recognition（识别服务可手动切换）
-  - 云端 API：OpenAI 兼容（硅基流动/Groq/OpenAI 均可，设置页可配）
-- 已实现：极简录音入桶（**按住上滑=松手取消**，靠扩大 pressRetentionOffset 防误判，0.7.0 起）、本地标题算法（src/lib/title.ts）、列表（推荐/时间/状态排序+搜索筛选）、详情（回放/AI 讨论/手动关联/状态流转/AI 建议关联确认）、30 天回收站、SQLite 日志（环形 500 条）、诊断+一键上报、**AI 关键词提取（第三方 API，失败回退本地算法）+ Jaccard 候选 + LLM 反迎合终审 + 灵感图谱 /graph（力导向布局，实线=已连接/虚线=AI 建议）**、全端 UI 改版（发丝边框/琥珀淡底选中态/圆角体系，src/theme.ts 有 radius 常量）
+  - 云端 API：OpenAI 兼容；设置页有服务商预设（硅基流动/DeepSeek/Groq/OpenAI）
+- 已实现：极简录音入桶（按住上滑=松手取消，靠扩大 pressRetentionOffset 防误判）、本地标题算法、列表（推荐/时间/状态排序+搜索筛选）、详情（回放/AI 讨论/手动关联/状态流转/AI 建议关联确认）、30 天回收站、SQLite 日志、诊断+一键上报、AI 关键词提取（第三方 API，失败回退本地）+ Jaccard 候选 + LLM 反迎合终审 + 灵感图谱（力导向布局）
 - **更新机制**：仓库根目录 release.json（经 jsDelivr 拉取，多镜像取最大版本容错）→ 应用内下载 APK → 系统安装器确认；版本号唯一来源 `src/version.ts`（app.json 同步）；出包 `npx --yes eas-cli build --platform android --profile preview --non-interactive --wait`（EAS owner: nachdenken，已登录）；出包后更新 release.json 推送并调 purge.jsdelivr.net 刷新
 - 版本规则：每次发版必递增（修复=补丁位 / 功能=次版本位 / 破坏=主版本位）
 - **教训（勿重复踩坑）**：
   1. react-native 没有 ErrorUtils 具名导出（只在 globalThis 上，曾因它 OTA 变砖）
-  2. sherpa-onnx 离线识别器不吃流式模型（报维度错误 Got: xxx Expected: 39），反之亦然——按模型 engine 分流
+  2. sherpa-onnx 离线识别器不吃流式模型（报维度错误），反之亦然——按模型 engine 分流
   3. 版本号参与 fingerprint 计算 → EAS Update OTA 与"版本号递增"结构性冲突 → OTA 已弃用
   4. eas update 必须带 `--platform android`（本项目不发 web 端）
-  5. Pressable 默认 pressRetentionOffset 只有 20px，做滑动手势必须手动扩大，否则滑动途中触发 onPressOut
+  5. Pressable 默认 pressRetentionOffset 只有 20px，做滑动手势必须手动扩大
   6. `npx eas login` 要写 `npx eas-cli login`；expo.dev 的 APK 直链下载慢，App 内下载用 createDownloadResumable+重试+浏览器兜底
   7. Qwen3-ASR 默认 maxTotalLen 512/maxNewTokens 128 只够十几秒音频，长录音必须调大
+  8. expo-file-system 新 API 的 File.downloadFileAsync 大文件会超时，下载一律走 legacy createDownloadResumable
 - 待办：见 PROJECT.md「更新计划（backlog）」
