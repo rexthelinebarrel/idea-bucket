@@ -1,10 +1,21 @@
 // 列表视图：打开列表 = 准备开工。默认推荐优先（AI 替用户翻），支持搜索与状态筛选。
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { colors, STATUS, type IdeaStatus } from '@/theme';
-import { listIdeas, type Idea } from '@/lib/db';
+import { listIdeas, getSetting, setSetting, type Idea } from '@/lib/db';
+import { runAiOrganize } from '@/lib/pipeline';
 import { IdeaCard } from '@/components/idea-card';
 
 type SortKey = 'recommend' | 'time' | 'status';
@@ -31,12 +42,36 @@ export default function ListScreen() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<SortKey>('recommend');
   const [statusFilter, setStatusFilter] = useState<IdeaStatus | 'all'>('all');
+  const [organizing, setOrganizing] = useState(false);
+  const [lastOrganize, setLastOrganize] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       setIdeas(listIdeas());
+      setLastOrganize(getSetting('last_ai_organize') ?? '');
     }, []),
   );
+
+  // 「AI 整理」：批量升级关键词 → 重算候选 → 限量终审 → 清陈旧候选（成本护栏在 pipeline 里）
+  async function organize() {
+    if (organizing) return;
+    setOrganizing(true);
+    try {
+      const s = await runAiOrganize();
+      const stamp = `${new Date().toLocaleString()} 提取 ${s.extracted} · 候选 ${s.candidates} · 终审 ${s.judged}`;
+      setSetting('last_ai_organize', stamp);
+      setLastOrganize(stamp);
+      setIdeas(listIdeas());
+      Alert.alert(
+        'AI 整理完成',
+        `提取/升级关键词 ${s.extracted} 条\n新增候选 ${s.candidates} 对\n终审判定 ${s.judged} 对\n清理陈旧候选 ${s.pruned} 对\n\n候选在灵感详情页「AI 建议关联」里等你确认。`,
+      );
+    } catch (e) {
+      Alert.alert('无法整理', e instanceof Error ? e.message : '网络异常，请重试');
+    } finally {
+      setOrganizing(false);
+    }
+  }
 
   const shown = useMemo(() => {
     let list = ideas;
@@ -104,6 +139,21 @@ export default function ListScreen() {
           </Pressable>
         ))}
       </ScrollView>
+
+      <View style={styles.organizeRow}>
+        <Pressable style={styles.organizeBtn} onPress={organize} disabled={organizing}>
+          {organizing ? (
+            <ActivityIndicator color={colors.accent} size="small" />
+          ) : (
+            <Text style={styles.organizeBtnText}>✨ AI 整理</Text>
+          )}
+        </Pressable>
+        {!!lastOrganize && (
+          <Text style={styles.organizeInfo} numberOfLines={1}>
+            上次：{lastOrganize}
+          </Text>
+        )}
+      </View>
 
       <FlatList
         data={shown}
@@ -191,6 +241,32 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: colors.accent,
     fontWeight: '600',
+  },
+  organizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  organizeBtn: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  organizeBtnText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  organizeInfo: {
+    flex: 1,
+    color: colors.textDim,
+    fontSize: 11,
   },
   listContent: {
     paddingTop: 14,

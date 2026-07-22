@@ -92,6 +92,10 @@ db.execSync(`
   if (!cols.some((c) => c.name === 'keywords')) {
     db.execSync("ALTER TABLE ideas ADD COLUMN keywords TEXT NOT NULL DEFAULT ''");
   }
+  // 关键词来源标记：'ai' = AI 提取；'local' = 本地算法（待 AI 升级）；'' = 未提取
+  if (!cols.some((c) => c.name === 'keywords_source')) {
+    db.execSync("ALTER TABLE ideas ADD COLUMN keywords_source TEXT NOT NULL DEFAULT 'local'");
+  }
 }
 
 export function genId(): string {
@@ -274,9 +278,10 @@ export function listActiveCandidates(): { a: string; b: string }[] {
 
 // ---- 关键词（AI 自动连接第 0 层）----
 
-export function updateIdeaKeywords(id: string, keywords: string[]): void {
-  db.runSync('UPDATE ideas SET keywords = ?, updated_at = ? WHERE id = ?', [
+export function updateIdeaKeywords(id: string, keywords: string[], source: 'ai' | 'local' = 'local'): void {
+  db.runSync('UPDATE ideas SET keywords = ?, keywords_source = ?, updated_at = ? WHERE id = ?', [
     JSON.stringify(keywords),
+    source,
     Date.now(),
     id,
   ]);
@@ -286,6 +291,18 @@ export function updateIdeaKeywords(id: string, keywords: string[]): void {
 export function listIdeasMissingKeywords(): { id: string; transcript: string }[] {
   return db.getAllSync<{ id: string; transcript: string }>(
     "SELECT id, transcript FROM ideas WHERE keywords = '' AND transcript != '' AND deleted_at IS NULL",
+  );
+}
+
+/** 关键词还不是 AI 提取的灵感（「AI 整理」按钮的升级对象），新的在前 */
+export function listIdeasForAiUpgrade(
+  limit: number,
+): { id: string; title: string; transcript: string }[] {
+  return db.getAllSync<{ id: string; title: string; transcript: string }>(
+    `SELECT id, title, transcript FROM ideas
+     WHERE transcript != '' AND deleted_at IS NULL AND keywords_source != 'ai'
+     ORDER BY created_at DESC LIMIT ?`,
+    [limit],
   );
 }
 
@@ -394,6 +411,24 @@ export function confirmCandidate(x: string, y: string): void {
 export function dismissCandidate(x: string, y: string): void {
   const [a, b] = normPair(x, y);
   db.runSync("UPDATE connection_candidates SET status = 'dismissed' WHERE a = ? AND b = ?", [a, b]);
+}
+
+/** 清理陈旧候选：超过 maxAgeMs 仍是待判定/待确认状态的，直接忽略，返回清理数 */
+export function dismissStaleCandidates(maxAgeMs: number): number {
+  const cutoff = Date.now() - maxAgeMs;
+  const res = db.runSync(
+    "UPDATE connection_candidates SET status = 'dismissed' WHERE status = 'pending' AND created_at < ?",
+    [cutoff],
+  );
+  return res.changes;
+}
+
+/** 待处理候选总数（UI 展示用） */
+export function countPendingCandidates(): number {
+  const row = db.getFirstSync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM connection_candidates WHERE status = 'pending'",
+  );
+  return row?.n ?? 0;
 }
 
 // ---- 讨论消息 ----
