@@ -105,6 +105,8 @@ export default function SettingsScreen() {
   const [modelStates, setModelStates] = useState<Record<string, ModelState>>({});
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number | null>>({});
   const [providerHint, setProviderHint] = useState('');
+  const [testState, setTestState] = useState<'' | 'testing' | 'ok' | 'fail'>('');
+  const [testMsg, setTestMsg] = useState('');
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
@@ -152,6 +154,64 @@ export default function SettingsScreen() {
     saveAISettings({ ...form, baseUrl: form.baseUrl.trim(), apiKey: form.apiKey.trim() });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  // 连接测试：真实发一笔最小 chat 请求（max_tokens=1），一次验通 地址+Key+模型 三项。
+  // 成功绿色带延迟，失败红色带 HTTP 状态码或网络错误原因。
+  async function testConnection() {
+    const baseUrl = form.baseUrl.trim().replace(/\/+$/, '');
+    if (!baseUrl) {
+      setTestState('fail');
+      setTestMsg('✗ 请先填 API 地址');
+      return;
+    }
+    if (!form.apiKey.trim()) {
+      setTestState('fail');
+      setTestMsg('✗ 请先填 API Key');
+      return;
+    }
+    setTestState('testing');
+    setTestMsg('测试中…');
+    const t0 = Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${form.apiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: form.chatModel.trim() || 'gpt-4o-mini',
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        }),
+        signal: ctrl.signal,
+      });
+      const ms = Date.now() - t0;
+      if (res.ok) {
+        setTestState('ok');
+        setTestMsg(`✓ 连接成功（HTTP ${res.status}，${ms}ms）`);
+        logEvent('ai', `连接测试成功（${ms}ms）`);
+      } else {
+        const body = (await res.text()).slice(0, 120);
+        setTestState('fail');
+        setTestMsg(`✗ 失败（HTTP ${res.status}）：${body}`);
+        logEvent('ai', `连接测试失败 HTTP ${res.status}`, 'warn');
+      }
+    } catch (e) {
+      const err = e as Error;
+      setTestState('fail');
+      setTestMsg(
+        err.name === 'AbortError'
+          ? '✗ 失败（超时）：15 秒无响应，地址可能不通'
+          : `✗ 失败（网络错误）：${err.message}`,
+      );
+      logEvent('ai', `连接测试网络错误: ${err.message}`, 'warn');
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // 标准安卓更新流程：拉版本清单 → 下载 APK → 系统安装器确认（不做静默自更新）
@@ -468,6 +528,27 @@ export default function SettingsScreen() {
       <Pressable style={styles.saveButton} onPress={save}>
         <Text style={styles.saveButtonText}>{saved ? '已保存 ✓' : '保存'}</Text>
       </Pressable>
+      <Pressable
+        style={styles.testButton}
+        onPress={testConnection}
+        disabled={testState === 'testing'}
+      >
+        <Text style={styles.testButtonText}>
+          {testState === 'testing' ? '测试中…' : '🔌 测试连接'}
+        </Text>
+      </Pressable>
+      {!!testMsg && (
+        <Text
+          style={[
+            styles.testResult,
+            testState === 'ok' && styles.testOk,
+            testState === 'fail' && styles.testFail,
+          ]}
+          selectable
+        >
+          {testMsg}
+        </Text>
+      )}
 
       <Text style={styles.sectionTitle}>数据</Text>
       <Pressable style={styles.row} onPress={() => router.push('/recycle-bin')}>
@@ -575,6 +656,18 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   saveButtonText: { color: colors.onAccent, fontWeight: '700', fontSize: 15, letterSpacing: 1 },
+  testButton: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  testButtonText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+  testResult: { fontSize: 13, lineHeight: 19, marginTop: 8 },
+  testOk: { color: '#3EBD6E' },
+  testFail: { color: colors.danger },
   modeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   modeRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   modeChip: {
