@@ -1,18 +1,18 @@
 // 全局主题：墨蓝深色为底，琥珀色作为主色（灵感=灯）
 // 高级感原则：发丝边框、克制留白、每屏最多一个实心主按钮、选中态用淡底+描边而非实心色块
 export const colors = {
-  bg: '#0B0E13',
-  card: '#151B24',
-  cardBorder: '#242E3B',
-  text: '#ECF0F6',
-  textDim: '#8B98A9',
+  bg: '#080A0E',
+  card: '#171E29',
+  cardBorder: '#2A3546',
+  text: '#F0F3F8',
+  textDim: '#94A1B4',
   accent: '#FFB020',
-  accentSoft: 'rgba(255, 176, 32, 0.12)',
+  accentSoft: 'rgba(255, 176, 32, 0.14)',
   onAccent: '#1A1206',
   danger: '#E5534B',
-  dangerSoft: 'rgba(229, 83, 75, 0.14)',
+  dangerSoft: 'rgba(229, 83, 75, 0.16)',
   primary: '#4C9AFF',
-  primarySoft: 'rgba(76, 154, 255, 0.14)',
+  primarySoft: 'rgba(76, 154, 255, 0.16)',
 };
 
 export const radius = {

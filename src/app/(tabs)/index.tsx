@@ -27,7 +27,7 @@ import {
 } from '@jamsch/expo-speech-recognition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radius } from '@/theme';
+import { colors } from '@/theme';
 import { countIdeas, createIdea, genId, setSetting, logEvent } from '@/lib/db';
 import { moveRecording, deleteAudioFile } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
@@ -298,14 +298,25 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: 12 }]}>
       <View style={styles.brand}>
         <Text style={styles.logo}>灵感桶</Text>
+        <View style={styles.brandRule} />
         <Text style={styles.slogan}>按住说话，松手即走</Text>
       </View>
 
       <View style={styles.middle}>
+        <Text style={styles.counter}>
+          {count > 0 ? `桶里攒了 ${count} 个点子` : '桶还是空的，丢第一个进来'}
+        </Text>
         <View style={styles.micWrap}>
+          <View
+            style={[
+              styles.micRingOuter,
+              recording && !cancelArmed && styles.micRingOuterActive,
+              cancelArmed && styles.micRingOuterCancel,
+            ]}
+          />
           <View
             style={[
               styles.micRing,
@@ -333,19 +344,7 @@ export default function HomeScreen() {
         <Text style={[styles.hint, cancelArmed && styles.hintCancel]}>
           {recording ? (cancelArmed ? '松手取消' : '正在录音 · 上滑取消') : ''}
         </Text>
-        <Text style={styles.counter}>
-          {count > 0 ? `桶里攒了 ${count} 个点子` : '桶还是空的，丢第一个进来'}
-        </Text>
         {toast ? <Text style={styles.toast}>{toast}</Text> : null}
-      </View>
-
-      <View style={styles.footer}>
-        <Pressable style={styles.footerPrimary} onPress={() => router.push('/list')}>
-          <Text style={styles.footerPrimaryText}>📋 灵感列表</Text>
-        </Pressable>
-        <Pressable style={styles.footerGhost} onPress={() => router.push('/settings')}>
-          <Text style={styles.footerGhostText}>⚙️ 设置</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -361,52 +360,83 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    fontSize: 38,
+    fontSize: 42,
     fontWeight: '800',
     color: colors.text,
-    letterSpacing: 8,
+    letterSpacing: 12,
     textAlign: 'center',
-    marginLeft: 8, // 抵消末字 letterSpacing 造成的视觉偏移
+    marginLeft: 12, // 抵消末字 letterSpacing 造成的视觉偏移
+  },
+  brandRule: {
+    width: 44,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+    marginTop: 14,
   },
   slogan: {
     fontSize: 13,
     color: colors.textDim,
-    letterSpacing: 3,
+    letterSpacing: 4,
     textAlign: 'center',
     marginTop: 12,
-    marginLeft: 3,
+    marginLeft: 4,
   },
   middle: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  counter: {
+    fontSize: 14,
+    color: colors.textDim,
+    letterSpacing: 1,
+    marginBottom: 28,
+  },
   micWrap: {
-    width: 224,
-    height: 224,
+    width: 264,
+    height: 264,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  micRing: {
+  micRingOuter: {
     position: 'absolute',
-    width: 212,
-    height: 212,
-    borderRadius: 106,
+    width: 264,
+    height: 264,
+    borderRadius: 132,
     borderWidth: 1,
     borderColor: colors.accentSoft,
+    opacity: 0.5,
+  },
+  micRingOuterActive: {
+    borderColor: colors.danger,
+    opacity: 0.3,
+  },
+  micRingOuterCancel: {
+    borderColor: colors.danger,
+    opacity: 0.7,
+  },
+  micRing: {
+    position: 'absolute',
+    width: 216,
+    height: 216,
+    borderRadius: 108,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    opacity: 0.35,
   },
   micRingActive: {
     borderColor: colors.danger,
-    opacity: 0.55,
+    opacity: 0.6,
   },
   micRingCancel: {
     borderColor: colors.danger,
     opacity: 1,
   },
   micButton: {
-    width: 168,
-    height: 168,
-    borderRadius: 84,
+    width: 184,
+    height: 184,
+    borderRadius: 92,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.accent,
@@ -427,60 +457,22 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.94 }],
   },
   micIcon: {
-    fontSize: 68,
+    fontSize: 74,
   },
   hint: {
     fontSize: 14,
     color: colors.accent,
-    marginTop: 26,
+    marginTop: 30,
     minHeight: 22,
-    letterSpacing: 1,
+    letterSpacing: 2,
   },
   hintCancel: {
     color: colors.danger,
     fontWeight: '700',
   },
-  counter: {
-    fontSize: 14,
-    color: colors.textDim,
-    marginTop: 8,
-    letterSpacing: 0.5,
-  },
   toast: {
     fontSize: 14,
     color: colors.accent,
     marginTop: 14,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  footerPrimary: {
-    flex: 1,
-    paddingVertical: 15,
-    borderRadius: radius.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    alignItems: 'center',
-  },
-  footerPrimaryText: {
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  footerGhost: {
-    paddingHorizontal: 22,
-    paddingVertical: 15,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerGhostText: {
-    fontSize: 15,
-    color: colors.textDim,
   },
 });

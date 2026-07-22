@@ -47,6 +47,49 @@ const FIELDS: {
   { key: 'transcribeModel', label: '转写模型', placeholder: 'whisper-1', cloudOnly: true },
 ];
 
+// 常用服务商预设：一键填入地址和推荐模型，Key 仍需自己填。
+// chatModel 用于 AI 讨论/关键词提取/连接终审；transcribeModel 仅云端转写模式用。
+const PROVIDERS: {
+  key: string;
+  label: string;
+  baseUrl: string;
+  chatModel: string;
+  transcribeModel?: string; // 缺省 = 这家没有转写服务，保持原值
+  hint: string;
+}[] = [
+  {
+    key: 'siliconflow',
+    label: '硅基流动',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    chatModel: 'deepseek-ai/DeepSeek-V3',
+    transcribeModel: 'FunAudioLLM/SenseVoiceSmall',
+    hint: '国内直连，有免费额度，转写+对话都全',
+  },
+  {
+    key: 'deepseek',
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    chatModel: 'deepseek-chat',
+    hint: '国内直连，便宜；没有转写服务（转写请用离线引擎或硅基流动）',
+  },
+  {
+    key: 'groq',
+    label: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    chatModel: 'llama-3.3-70b-versatile',
+    transcribeModel: 'whisper-large-v3-turbo',
+    hint: '海外，速度极快，有免费额度',
+  },
+  {
+    key: 'openai',
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    chatModel: 'gpt-4o-mini',
+    transcribeModel: 'whisper-1',
+    hint: '海外，官方接口',
+  },
+];
+
 export default function SettingsScreen() {
   const [form, setForm] = useState<AISettings>(() => getAISettings());
   const [saved, setSaved] = useState(false);
@@ -61,6 +104,7 @@ export default function SettingsScreen() {
   const [activeId, setActiveId] = useState(() => getActiveModelId());
   const [modelStates, setModelStates] = useState<Record<string, ModelState>>({});
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number | null>>({});
+  const [providerHint, setProviderHint] = useState('');
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
@@ -383,9 +427,29 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>{isCloud ? 'AI 服务' : 'AI 服务（可选）'}</Text>
       <Text style={styles.note}>
         {isCloud
-          ? '云端转写和 AI 讨论都用这组配置；Key 仅保存在本机数据库。国内推荐硅基流动（siliconflow.cn，免费额度）：地址填 https://api.siliconflow.cn/v1，转写模型以控制台为准（如 FunAudioLLM/SenseVoiceSmall）；海外可选 Groq 或 OpenAI。'
-          : '系统识别已够用，这里不用配。想体验「AI 讨论」（对灵感展开/追问/对话）时再配：国内推荐硅基流动（siliconflow.cn，有免费模型）。'}
+          ? '云端转写和 AI 讨论都用这组配置；Key 仅保存在本机数据库。'
+          : '配上后解锁：AI 讨论、AI 关键词提取、灵感智能关联。Key 仅保存在本机数据库。'}
       </Text>
+      <View style={styles.modeRowWrap}>
+        {PROVIDERS.map((p) => (
+          <Pressable
+            key={p.key}
+            style={styles.modeChip}
+            onPress={() => {
+              setForm({
+                ...form,
+                baseUrl: p.baseUrl,
+                chatModel: p.chatModel,
+                ...(p.transcribeModel ? { transcribeModel: p.transcribeModel } : {}),
+              });
+              setProviderHint(`${p.label}：${p.hint}`);
+            }}
+          >
+            <Text style={styles.modeChipText}>{p.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {!!providerHint && <Text style={styles.note}>{providerHint}（已填入地址和模型，Key 自己填，记得点保存）</Text>}
       {FIELDS.filter((f) => isCloud || !f.cloudOnly).map((f) => (
         <View key={f.key} style={styles.field}>
           <Text style={styles.label}>{f.label}</Text>
@@ -481,11 +545,14 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.textDim,
+    fontWeight: '700',
+    color: colors.text,
     letterSpacing: 2,
-    marginTop: 22,
-    marginBottom: 8,
+    marginTop: 24,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    paddingLeft: 10,
   },
   note: { fontSize: 13, color: colors.textDim, lineHeight: 20, marginBottom: 8 },
   field: { marginBottom: 12 },

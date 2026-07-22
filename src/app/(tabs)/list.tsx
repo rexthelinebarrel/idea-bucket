@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
-import { colors, radius, STATUS, type IdeaStatus } from '@/theme';
+import { colors, STATUS, type IdeaStatus } from '@/theme';
 import { listIdeas, type Idea } from '@/lib/db';
 import { IdeaCard } from '@/components/idea-card';
 
@@ -71,20 +71,18 @@ export default function ListScreen() {
         onChangeText={setQ}
       />
 
-      <View style={styles.sortRow}>
+      <View style={styles.segment}>
         {SORTS.map((s) => (
           <Pressable
             key={s.key}
-            style={[styles.chip, sort === s.key && styles.chipActive]}
+            style={[styles.segmentItem, sort === s.key && styles.segmentItemActive]}
             onPress={() => setSort(s.key)}
           >
-            <Text style={[styles.chipText, sort === s.key && styles.chipTextActive]}>{s.label}</Text>
+            <Text style={[styles.segmentText, sort === s.key && styles.segmentTextActive]}>
+              {s.label}
+            </Text>
           </Pressable>
         ))}
-        <View style={styles.sortSpacer} />
-        <Pressable style={styles.chip} onPress={() => router.push('/graph')}>
-          <Text style={styles.chipText}>🕸 图谱</Text>
-        </Pressable>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
@@ -132,22 +130,42 @@ const styles = StyleSheet.create({
   },
   search: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     color: colors.text,
     fontSize: 15,
     marginTop: 12,
   },
-  sortRow: {
+  segment: {
     flexDirection: 'row',
-    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 3,
     marginTop: 12,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 999,
     alignItems: 'center',
   },
-  sortSpacer: { flex: 1 },
+  segmentItemActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  segmentText: {
+    fontSize: 13,
+    color: colors.textDim,
+    letterSpacing: 1,
+  },
+  segmentTextActive: {
+    color: colors.accent,
+    fontWeight: '700',
+  },
   filterRow: {
     flexDirection: 'row',
     marginTop: 10,

@@ -77,12 +77,9 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="list" options={{ title: '灵感列表' }} />
-        <Stack.Screen name="graph" options={{ title: '灵感图谱' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="idea/[id]" options={{ title: '灵感详情' }} />
         <Stack.Screen name="connect/[id]" options={{ title: '建立关联' }} />
-        <Stack.Screen name="settings" options={{ title: '设置' }} />
         <Stack.Screen name="recycle-bin" options={{ title: '回收站' }} />
       </Stack>
     </>

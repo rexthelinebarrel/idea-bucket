@@ -232,9 +232,11 @@ export default function GraphScreen() {
           </Pressable>
         </View>
       )}
-      <Text style={styles.legend}>
-        {edgeCount} 条已连接 · {candCount} 条 AI 建议（虚线） · 拖动平移，点节点看详情
-      </Text>
+      <View style={styles.legendWrap}>
+        <Text style={styles.legend}>
+          {edgeCount} 条已连接 · {candCount} 条 AI 建议（虚线） · 拖动平移，点节点看详情
+        </Text>
+      </View>
     </View>
   );
 }
@@ -244,12 +246,22 @@ const styles = StyleSheet.create({
   canvas: { flex: 1, overflow: 'hidden' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { color: colors.textDim, fontSize: 15 },
+  legendWrap: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
   legend: {
     color: colors.textDim,
     fontSize: 12,
-    textAlign: 'center',
-    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 999,
     paddingHorizontal: 16,
+    paddingVertical: 7,
+    overflow: 'hidden',
+    textAlign: 'center',
   },
   resetBtn: {
     position: 'absolute',

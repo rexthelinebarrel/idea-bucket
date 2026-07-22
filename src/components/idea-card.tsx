@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius } from '@/theme';
+import { colors, radius, STATUS } from '@/theme';
 import type { Idea } from '@/lib/db';
 import { fmtDateTime } from '@/lib/format';
 import { StatusBadge } from './status-badge';
@@ -12,41 +12,53 @@ export function IdeaCard({ idea, onPress }: { idea: Idea; onPress: () => void })
       : idea.transcribeState === 'pending'
         ? '转写中…'
         : idea.transcript.trim().slice(0, 60);
+  const statusColor = (STATUS[idea.status] ?? STATUS.raw).color;
 
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
     >
-      <View style={styles.row}>
-        <StatusBadge status={idea.status} />
-        <Text style={styles.time}>{fmtDateTime(idea.createdAt)}</Text>
-        {(idea.connCount ?? 0) > 0 && <Text style={styles.conn}>🔗 {idea.connCount}</Text>}
-        {(idea.candCount ?? 0) > 0 && <Text style={styles.cand}>✨ {idea.candCount}</Text>}
-      </View>
-      <Text style={styles.title} numberOfLines={1}>
-        {idea.title}
-      </Text>
-      {!!excerpt && (
-        <Text style={styles.excerpt} numberOfLines={2}>
-          {excerpt}
+      <View style={[styles.bar, { backgroundColor: statusColor }]} />
+      <View style={styles.body}>
+        <View style={styles.row}>
+          <StatusBadge status={idea.status} />
+          <Text style={styles.time}>{fmtDateTime(idea.createdAt)}</Text>
+          {(idea.connCount ?? 0) > 0 && <Text style={styles.conn}>🔗 {idea.connCount}</Text>}
+          {(idea.candCount ?? 0) > 0 && <Text style={styles.cand}>✨ {idea.candCount}</Text>}
+        </View>
+        <Text style={styles.title} numberOfLines={1}>
+          {idea.title}
         </Text>
-      )}
+        {!!excerpt && (
+          <Text style={styles.excerpt} numberOfLines={2}>
+            {excerpt}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    padding: 16,
-    gap: 8,
+    overflow: 'hidden',
   },
   cardPressed: {
     opacity: 0.75,
+  },
+  bar: {
+    width: 4,
+  },
+  body: {
+    flex: 1,
+    padding: 16,
+    gap: 8,
   },
   row: {
     flexDirection: 'row',
@@ -68,9 +80,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   excerpt: {
     color: colors.textDim,
