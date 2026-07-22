@@ -1,6 +1,6 @@
 {
-  "version": "0.8.1",
-  "apkUrl": "https://expo.dev/artifacts/eas/ulRYt4SaoVwXR6NPQjTlVerNIYwpyjV9O-EDC-mJkkc.apk",
-  "notes": "设置页 AI 服务新增「测试连接」按钮：成功显示绿色（带延迟毫秒数），失败显示红色并给出 HTTP 状态码或网络错误原因。",
+  "version": "0.9.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/mj8AtqjHqRP7VeKFhpBBI3GVC3xhOUN_-HdULxrB_UA.apk",
+  "notes": "全新品牌图标与启动页（琥珀灵感桶）；新增新手指南：首次启动自动弹出四页引导，设置页「新手指南」可随时重看。",
   "publishedAt": "2026-07-22"
 }
