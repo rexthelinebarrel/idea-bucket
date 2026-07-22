@@ -161,6 +161,17 @@ vibecoding 过程中，灵感来得很随机（走路、洗澡、临睡前），
 - 出包命令：`npx eas build --platform android --profile preview`（EAS 项目 owner：nachdenken）
 - （历史教训：曾用 EAS Update OTA + fingerprint runtime，因"版本号参与指纹计算"导致版本递增与 OTA 匹配存在结构性冲突，且用户要求系统安装确认流程，已弃用）
 
+## 「AI 整理连接」按钮 + 连接算法（讨论稿，未实现，用户拍板后才做）
+
+按钮放列表页头部「✨ AI 整理」，按下后：①对无关键词的灵感调 AI 补提取（约 200 token/条）→ ②两两关键词 Jaccard 重算候选 → ③LLM 终审判定 merge/evolve/collide/none（反迎合 prompt，已有）→ ④全部进详情页「AI 建议关联」，用户确认才连接。
+成本控制：每点一次最多补 20 条关键词、终审 10 对；50 条灵感全量 ≈ 1 万 token（DeepSeek 几分钱）。
+
+待拍板（我的建议）：
+- A. 匹配阈值：现 0.34，建议保持（宽进严出靠终审）
+- B. 向量语义第 1 层（硅基流动免费 BGE，抓字面不同但语义近似的）：建议做，放下一版
+- C. 终审判 merge 是否自动连：建议否，全部进建议等确认（反迎合原则）
+- D. 是否顺手清理 30 天陈旧候选：建议是
+
 ## 更新计划（backlog，按优先级）
 
 1. **AI 自动连接补强**：第 1 层向量粗筛（免费 BGE，抓关键词不同但语义相近的候选）；供应商解耦（OpenAI 兼容，终审可用 deepseek-chat）

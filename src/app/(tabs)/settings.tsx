@@ -32,6 +32,7 @@ import {
 } from '@/lib/offline-stt';
 import { APP_VERSION } from '@/version';
 import { fetchLatestRelease, hasNewerRelease, type ReleaseInfo } from '@/lib/release';
+import { Onboarding } from '@/components/onboarding';
 
 const FIELDS: {
   key: keyof AISettings;
@@ -107,6 +108,7 @@ export default function SettingsScreen() {
   const [providerHint, setProviderHint] = useState('');
   const [testState, setTestState] = useState<'' | 'testing' | 'ok' | 'fail'>('');
   const [testMsg, setTestMsg] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   function buildDiag(s: AISettings, svcCount: number): [string, string][] {
     return [
@@ -555,6 +557,11 @@ export default function SettingsScreen() {
         <Text style={styles.rowText}>🗑 回收站（{binCount}）</Text>
         <Text style={styles.rowArrow}>›</Text>
       </Pressable>
+      <Pressable style={styles.row} onPress={() => setShowGuide(true)}>
+        <Text style={styles.rowText}>📖 新手指南</Text>
+        <Text style={styles.rowArrow}>›</Text>
+      </Pressable>
+      <Onboarding visible={showGuide} onClose={() => setShowGuide(false)} />
       <Text style={styles.note}>删除的灵感保留 30 天，到期自动彻底清除。灵感和音频均保存在本机。</Text>
 
       <Text style={styles.sectionTitle}>更新</Text>

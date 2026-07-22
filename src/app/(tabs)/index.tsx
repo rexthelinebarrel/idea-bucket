@@ -28,18 +28,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/theme';
-import { countIdeas, createIdea, genId, setSetting, logEvent } from '@/lib/db';
+import { countIdeas, createIdea, genId, getSetting, setSetting, logEvent } from '@/lib/db';
 import { moveRecording, deleteAudioFile } from '@/lib/files';
 import { generateTitle, placeholderTitle } from '@/lib/title';
 import { processIdea } from '@/lib/pipeline';
 import { getAISettings, type AISettings } from '@/lib/ai';
 import { getActiveModelId, getModelState } from '@/lib/offline-stt';
+import { Onboarding } from '@/components/onboarding';
 
 export default function HomeScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [count, setCount] = useState(0);
   const [recording, setRecording] = useState(false);
   const [toast, setToast] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
   // 上滑取消：手指从按下位置上移超过阈值即进入"松手取消"状态
   const [cancelArmed, setCancelArmed] = useState(false);
   const cancelArmedRef = useRef(false);
@@ -63,6 +65,8 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
+    // 首次启动弹新手指南（只看一次）
+    if (!getSetting('onboarding_seen')) setShowGuide(true);
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
@@ -346,6 +350,14 @@ export default function HomeScreen() {
         </Text>
         {toast ? <Text style={styles.toast}>{toast}</Text> : null}
       </View>
+
+      <Onboarding
+        visible={showGuide}
+        onClose={() => {
+          setSetting('onboarding_seen', '1');
+          setShowGuide(false);
+        }}
+      />
     </View>
   );
 }
