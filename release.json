@@ -1,6 +1,6 @@
 {
-  "version": "0.8.0",
-  "apkUrl": "https://expo.dev/artifacts/eas/P_NZmCKGGwbYILTxoaoKlZfZ6nEUgrORv9o2P_9ZsE4.apk",
-  "notes": "界面大改版：底部导航栏（投入/灵感/图谱/设置），首页只留录音；全新视觉（光晕麦克风、分段控件、状态色条卡片）。设置页 AI 服务新增常用服务商预设（硅基流动/DeepSeek/Groq/OpenAI），一键填地址和模型。",
+  "version": "0.8.1",
+  "apkUrl": "https://expo.dev/artifacts/eas/ulRYt4SaoVwXR6NPQjTlVerNIYwpyjV9O-EDC-mJkkc.apk",
+  "notes": "设置页 AI 服务新增「测试连接」按钮：成功显示绿色（带延迟毫秒数），失败显示红色并给出 HTTP 状态码或网络错误原因。",
   "publishedAt": "2026-07-22"
 }
