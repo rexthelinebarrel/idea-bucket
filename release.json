@@ -1,6 +1,6 @@
 {
-  "version": "0.7.0",
-  "apkUrl": "https://expo.dev/artifacts/eas/GCyz9xCoXIlxCjdDsAouXWSI3ftbm8qLa5m-G_m5kh8.apk",
-  "notes": "①录音按住上滑可取消（松手丢弃）；②离线模型新增 Qwen3 高精度版（940MB，设置页下载，识别准确率大幅提升，建议 WiFi 下载）；③关键词改用 AI 提取（配置 API Key 后生效），新增灵感图谱（列表页右上角 🕸 入口）；④全端界面改版。",
+  "version": "0.8.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/P_NZmCKGGwbYILTxoaoKlZfZ6nEUgrORv9o2P_9ZsE4.apk",
+  "notes": "界面大改版：底部导航栏（投入/灵感/图谱/设置），首页只留录音；全新视觉（光晕麦克风、分段控件、状态色条卡片）。设置页 AI 服务新增常用服务商预设（硅基流动/DeepSeek/Groq/OpenAI），一键填地址和模型。",
   "publishedAt": "2026-07-22"
 }
