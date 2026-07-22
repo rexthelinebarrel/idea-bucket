@@ -1,6 +1,6 @@
 {
-  "version": "0.9.0",
-  "apkUrl": "https://expo.dev/artifacts/eas/mj8AtqjHqRP7VeKFhpBBI3GVC3xhOUN_-HdULxrB_UA.apk",
-  "notes": "全新品牌图标与启动页（琥珀灵感桶）；新增新手指南：首次启动自动弹出四页引导，设置页「新手指南」可随时重看。",
+  "version": "0.10.0",
+  "apkUrl": "https://expo.dev/artifacts/eas/zU3OGsY-K2gCjrNvKosisn5s8pV61DjVj-xfDAGXZDc.apk",
+  "notes": "新增「✨ AI 整理」按钮（灵感页）：批量把关键词升级为 AI 提取（每次限 20 条），重算关联候选并限量终审（10 对），顺手清理 30 天陈旧候选。匹配算法改倒排索引，灵感再多也不卡；已连接的不再重复建议。需先在设置页配 API Key。",
   "publishedAt": "2026-07-22"
 }
